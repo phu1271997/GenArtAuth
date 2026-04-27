@@ -1,8 +1,7 @@
 "use client";
 
-import { useState } from "react";
 import { motion } from "framer-motion";
-import { AlertCircle, CheckCircle, Clock, ExternalLink, ShieldAlert } from "lucide-react";
+import { CheckCircle, Clock, ExternalLink, ShieldAlert } from "lucide-react";
 import Link from "next/link";
 
 // Mock Data
