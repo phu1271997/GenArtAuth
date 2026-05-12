@@ -135,7 +135,8 @@ export default function Dashboard() {
             </div>
           </motion.div>
         ))}
-      </div>
+        </div>
+      )}
     </div>
   );
 }
