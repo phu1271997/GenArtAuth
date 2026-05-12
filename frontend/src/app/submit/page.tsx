@@ -28,13 +28,25 @@ export default function SubmitArtwork() {
     if (!artworkUrl || !isConnected) return;
     
     setIsSubmitting(true);
-    // TODO: Connect to GenLayer Contract submitArtwork(artworkUrl, sourceUrls)
-    setTimeout(() => {
-      setIsSubmitting(false);
-      alert("Artwork submitted to GenLayer Intelligence for verification!");
+    try {
+      const { createClient } = await import("genlayer-js");
+      const client = createClient({ provider: (window as any).ethereum });
+      
+      const txHash = await client.writeContract({
+        address: process.env.NEXT_PUBLIC_GENLAYER_CONTRACT_ADDRESS as `0x${string}`,
+        functionName: "submitArtwork",
+        args: [artworkUrl, sourceUrls]
+      });
+      
+      alert(`Artwork submitted to GenLayer Intelligence! TxHash: ${txHash}`);
       setArtworkUrl("");
       setSourceUrls([]);
-    }, 2000);
+    } catch (error: any) {
+      console.error(error);
+      alert(`Submission failed: ${error.message || "Check console for details."}`);
+    } finally {
+      setIsSubmitting(false);
+    }
   };
 
   return (

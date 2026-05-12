@@ -4,39 +4,49 @@ import { motion } from "framer-motion";
 import { CheckCircle, Clock, ExternalLink, ShieldAlert } from "lucide-react";
 import Link from "next/link";
 
-// Mock Data
-const MOCK_RESULTS = [
-  {
-    id: 1,
-    url: "https://opensea.io/assets/boredape/123",
-    status: "VERIFIED",
-    verdict: {
-      authenticity: "ORIGINAL",
-      confidence: 98,
-      first_appearance: "2021-04-23",
-      recommended_action: "MINT_SAFE"
-    }
-  },
-  {
-    id: 2,
-    url: "https://foundation.app/mint/fake-artist",
-    status: "VERIFIED",
-    verdict: {
-      authenticity: "COPY",
-      confidence: 95,
-      first_appearance: "2024-01-10",
-      recommended_action: "BLOCK_MINT"
-    }
-  },
-  {
-    id: 3,
-    url: "https://superrare.com/ai-generated-piece",
-    status: "PROCESSING",
-    verdict: null
-  }
-];
+import { useEffect, useState } from "react";
 
 export default function Dashboard() {
+  const [results, setResults] = useState<any[]>([]);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    async function fetchResults() {
+      try {
+        const { createClient } = await import("genlayer-js");
+        const client = createClient();
+        
+        const fetchedResults = [];
+        // Scan for the first 10 artworks
+        for (let i = 1; i <= 10; i++) {
+          try {
+            const res: any = await client.readContract({
+              address: process.env.NEXT_PUBLIC_GENLAYER_CONTRACT_ADDRESS as `0x${string}`,
+              functionName: "getVerificationResult",
+              args: [String(i)]
+            });
+            if (res && res.artwork_id) {
+              fetchedResults.push({
+                id: res.artwork_id,
+                url: res.artwork_url,
+                status: res.status,
+                verdict: res.verdict
+              });
+            }
+          } catch (e) {
+            // Stop when we hit an unassigned ID
+            break;
+          }
+        }
+        setResults(fetchedResults.reverse());
+      } catch (err) {
+        console.error("Failed to fetch dashboard results:", err);
+      } finally {
+        setLoading(false);
+      }
+    }
+    fetchResults();
+  }, []);
   return (
     <div className="container mx-auto px-4 py-12">
       <div className="flex flex-col md:flex-row justify-between items-end mb-8 gap-4">
@@ -51,8 +61,17 @@ export default function Dashboard() {
         </Link>
       </div>
 
-      <div className="grid grid-cols-1 gap-4">
-        {MOCK_RESULTS.map((item, idx) => (
+      {loading ? (
+        <div className="flex justify-center p-12">
+          <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary"></div>
+        </div>
+      ) : results.length === 0 ? (
+        <div className="glass-panel p-12 text-center rounded-2xl">
+          <p className="text-gray-400">No verifications found on the network yet.</p>
+        </div>
+      ) : (
+        <div className="grid grid-cols-1 gap-4">
+          {results.map((item, idx) => (
           <motion.div
             key={item.id}
             initial={{ opacity: 0, y: 10 }}

@@ -5,29 +5,57 @@ import { CheckCircle, Clock, ExternalLink, ShieldAlert, Wallet } from "lucide-re
 import { useAccount } from "wagmi";
 import Link from "next/link";
 
-// Mock Data for the connected user
-const MOCK_MY_RESULTS = [
-  {
-    id: 1,
-    url: "https://opensea.io/assets/boredape/123",
-    status: "VERIFIED",
-    verdict: {
-      authenticity: "ORIGINAL",
-      confidence: 98,
-      first_appearance: "2021-04-23",
-      recommended_action: "MINT_SAFE"
-    }
-  },
-  {
-    id: 4,
-    url: "https://foundation.app/mint/my-new-art",
-    status: "PROCESSING",
-    verdict: null
-  }
-];
+import { useEffect, useState } from "react";
 
 export default function MyVerifications() {
-  const { isConnected } = useAccount();
+  const { address, isConnected } = useAccount();
+  const [results, setResults] = useState<any[]>([]);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    async function fetchMyResults() {
+      if (!address) return;
+      try {
+        const { createClient } = await import("genlayer-js");
+        const client = createClient();
+        
+        const fetchedResults = [];
+        for (let i = 1; i <= 10; i++) {
+          try {
+            const res: any = await client.readContract({
+              address: process.env.NEXT_PUBLIC_GENLAYER_CONTRACT_ADDRESS as `0x${string}`,
+              functionName: "getVerificationResult",
+              args: [String(i)]
+            });
+            if (res && res.artwork_id) {
+              // Ensure we match case insensitive since addresses can be mixed case
+              if (res.submitter?.toLowerCase() === address.toLowerCase()) {
+                fetchedResults.push({
+                  id: res.artwork_id,
+                  url: res.artwork_url,
+                  status: res.status,
+                  verdict: res.verdict
+                });
+              }
+            }
+          } catch (e) {
+            break;
+          }
+        }
+        setResults(fetchedResults.reverse());
+      } catch (err) {
+        console.error("Failed to fetch my verifications:", err);
+      } finally {
+        setLoading(false);
+      }
+    }
+    
+    if (isConnected) {
+      fetchMyResults();
+    } else {
+      setLoading(false);
+    }
+  }, [address, isConnected]);
 
   if (!isConnected) {
     return (
@@ -46,7 +74,11 @@ export default function MyVerifications() {
         <p className="text-gray-400">History of artworks you have submitted for GenLayer authenticity checks.</p>
       </div>
 
-      {MOCK_MY_RESULTS.length === 0 ? (
+      {loading ? (
+        <div className="flex justify-center p-12">
+          <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary"></div>
+        </div>
+      ) : results.length === 0 ? (
         <div className="glass-panel p-12 text-center rounded-2xl">
           <p className="text-gray-400 mb-4">You haven't submitted any artworks yet.</p>
           <Link href="/submit">
@@ -57,7 +89,7 @@ export default function MyVerifications() {
         </div>
       ) : (
         <div className="grid grid-cols-1 gap-4">
-          {MOCK_MY_RESULTS.map((item, idx) => (
+          {results.map((item, idx) => (
             <motion.div
               key={item.id}
               initial={{ opacity: 0, y: 10 }}
