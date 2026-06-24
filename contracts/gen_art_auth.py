@@ -12,16 +12,29 @@ class Artwork:
     submitter: Address
     artwork_url: str
     source_urls: str  # JSON-encoded list of strings
-    status: str  # "PENDING", "PROCESSING", "VERIFIED"
+    status: str  # "PENDING", "PROCESSING", "VERIFIED", "CHALLENGED"
     verdict: str  # JSON-encoded result
+
+@allow_storage
+@dataclass
+class Challenge:
+    artwork_id: str
+    challenger: Address
+    stake: int
+    evidence_urls: str  # JSON-encoded list of strings
+    status: str  # "PENDING", "RESOLVED_OVERTURNED", "RESOLVED_UPHELD"
+    new_verdict: str  # JSON-encoded result
 
 class Contract(gl.Contract):
     artworks: TreeMap[str, Artwork]
     artwork_url_to_id: TreeMap[str, str]
+    challenges: TreeMap[str, Challenge]
     next_artwork_id: str
+    min_challenge_stake: int
 
     def __init__(self):
         self.next_artwork_id = "1"
+        self.min_challenge_stake = 10 * 10**18  # 10 GEN
 
     def _verify(self, artwork_url: str, source_urls_json: str) -> str:
         def get_verdict() -> str:
@@ -130,13 +143,126 @@ It is mandatory that you respond only using the JSON format above, nothing else.
         result_json_str = gl.eq_principle.prompt_comparative(get_verdict, principle)
         return result_json_str
 
+    def _verify_challenge(self, artwork_url: str, original_sources_json: str, evidence_sources_json: str, old_verdict_json: str) -> str:
+        def get_challenge_verdict() -> str:
+            # 1. Crawl target artwork
+            try:
+                target_web_data = gl.nondet.web.render(artwork_url, mode="text")
+            except Exception as e:
+                raise Exception(f"Failed to crawl target artwork URL: {str(e)}")
+
+            # 2. Crawl original sources
+            original_sources = json.loads(original_sources_json)
+            original_contents = {}
+            for src in original_sources:
+                try:
+                    original_contents[src] = gl.nondet.web.render(src, mode="text")
+                except Exception as e:
+                    original_contents[src] = f"Error rendering source: {str(e)}"
+
+            # 3. Crawl new challenge evidence sources
+            evidence_sources = json.loads(evidence_sources_json)
+            evidence_contents = {}
+            for src in evidence_sources:
+                try:
+                    evidence_contents[src] = gl.nondet.web.render(src, mode="text")
+                except Exception as e:
+                    evidence_contents[src] = f"Error rendering evidence: {str(e)}"
+
+            # 4. Wayback Machine snapshot checks
+            wayback_data = {}
+            urls_to_check = [artwork_url] + original_sources + evidence_sources
+            for url in urls_to_check:
+                try:
+                    wayback_data[url] = gl.nondet.web.render(
+                        f"https://archive.org/wayback/available?url={url}", mode="text"
+                    )
+                except Exception as e:
+                    wayback_data[url] = f"Wayback API error: {str(e)}"
+
+            # 5. Forensic, Provenance, Skeptic Jury Prompt
+            task = f"""
+You are the Supreme AI Jury of GenArtAuth.
+A dispute has been raised against a previous authenticity verdict for this artwork.
+You must conduct a deep forensic, provenance, and skeptic analysis to reach a final, binding decision.
+
+Target Artwork:
+{target_web_data}
+
+Original Sources Evaluated Previously:
+{json.dumps(original_contents)}
+
+NEW Evidence Submitted by the Challenger:
+{json.dumps(evidence_contents)}
+
+Wayback Machine Snapshots (History & Timeline):
+{json.dumps(wayback_data)}
+
+Previous Verdict Details:
+{old_verdict_json}
+
+Your analysis must cover three perspectives:
+1. Forensic Perspective: Analyze visual/metadata consistency, compression, styling, and AI generation markers.
+2. Provenance Perspective: Critically map the creation timeline. Did the target artwork appear BEFORE or AFTER the original/evidence sources?
+3. Skeptic Perspective: Challenge the challenger's claims and the previous verdict's assumptions. Look for anomalies or attempts to forge provenance.
+
+Provide a final, comprehensive verdict.
+You must output a JSON object with the exact following schema:
+{{
+  "verdict": "ORIGINAL" | "COPY",
+  "action": "MINT_SAFE" | "BLOCK_MINT",
+  "confidence": <integer between 0 and 100>,
+  "earliest_source": "<url of the earliest appearance based on all evidence>",
+  "reason": "<extremely thorough justification including your forensic, provenance, and skeptic findings>"
+}}
+It is mandatory that you respond only using the JSON format above, nothing else.
+            """
+            
+            result = gl.nondet.exec_prompt(task, response_format="json")
+            
+            try:
+                if isinstance(result, dict):
+                    parsed = result
+                else:
+                    parsed = json.loads(result)
+                
+                verdict = parsed.get("verdict", "").upper()
+                action = parsed.get("action", "").upper()
+                confidence = int(parsed.get("confidence", 0))
+                earliest_source = parsed.get("earliest_source", "")
+                reason = parsed.get("reason", "")
+
+                if verdict not in ["ORIGINAL", "COPY"]:
+                    verdict = "COPY"
+                if action not in ["MINT_SAFE", "BLOCK_MINT"]:
+                    action = "BLOCK_MINT"
+                
+                cleaned_result = {
+                    "verdict": verdict,
+                    "action": action,
+                    "confidence": confidence,
+                    "earliest_source": earliest_source,
+                    "reason": reason
+                }
+                return json.dumps(cleaned_result, sort_keys=True)
+            except Exception as e:
+                raise Exception(f"Failed to parse AI Jury verdict JSON: {str(e)}")
+
+        principle = (
+            "The responses are equivalent if they both agree on the same 'verdict' (ORIGINAL vs COPY) "
+            "and the same 'action' (MINT_SAFE vs BLOCK_MINT), and their 'confidence' scores differ "
+            "by no more than 15. The 'earliest_source' should point to the same origin, and the "
+            "'reason' must be semantically similar."
+        )
+        
+        result_json_str = gl.eq_principle.prompt_comparative(get_challenge_verdict, principle)
+        return result_json_str
+
     @gl.public.write
     def submitArtwork(self, artwork_url: str, source_urls: DynArray[str]) -> str:
-        # Check for empty source URLs
         if len(source_urls) == 0:
             raise Exception("Source URLs cannot be empty")
             
-        # Double-submit protection
         normalized_url = artwork_url.strip().lower()
         if normalized_url in self.artwork_url_to_id:
             raise Exception("Artwork already submitted")
@@ -144,7 +270,6 @@ It is mandatory that you respond only using the JSON format above, nothing else.
         artwork_id = self.next_artwork_id
         self.next_artwork_id = str(int(self.next_artwork_id) + 1)
         
-        # Serialize source_urls for storage
         urls_list = []
         for url in source_urls:
             urls_list.append(url)
@@ -179,17 +304,84 @@ It is mandatory that you respond only using the JSON format above, nothing else.
         artwork.verdict = verdict_str
         self.artworks[artwork_id] = artwork
 
+    @gl.public.write.payable
+    def challengeVerdict(self, artwork_id: str, evidence_urls: DynArray[str]) -> None:
+        if artwork_id not in self.artworks:
+            raise Exception("Artwork not found")
+            
+        artwork = self.artworks[artwork_id]
+        if artwork.status != "VERIFIED":
+            raise Exception("Artwork must be verified to be challenged")
+            
+        if gl.message.value < self.min_challenge_stake:
+            raise Exception("Insufficient stake. Min stake is 10 GEN")
+            
+        if artwork_id in self.challenges:
+            raise Exception("Artwork is already challenged")
+
+        evidence_list = []
+        for url in evidence_urls:
+            evidence_list.append(url)
+            
+        challenge = Challenge(
+            artwork_id=artwork_id,
+            challenger=gl.message.sender_address,
+            stake=gl.message.value,
+            evidence_urls=json.dumps(evidence_list),
+            status="PENDING",
+            new_verdict=""
+        )
+        
+        self.challenges[artwork_id] = challenge
+        artwork.status = "CHALLENGED"
+        self.artworks[artwork_id] = artwork
+
+    @gl.public.write
+    def resolveChallenge(self, artwork_id: str) -> None:
+        if artwork_id not in self.challenges:
+            raise Exception("Challenge not found")
+            
+        challenge = self.challenges[artwork_id]
+        if challenge.status != "PENDING":
+            raise Exception("Challenge already resolved or in progress")
+            
+        artwork = self.artworks[artwork_id]
+        
+        new_verdict_str = self._verify_challenge(
+            artwork.artwork_url, 
+            artwork.source_urls, 
+            challenge.evidence_urls, 
+            artwork.verdict
+        )
+        
+        new_verdict_json = json.loads(new_verdict_str)
+        old_verdict_json = json.loads(artwork.verdict)
+        
+        is_overturned = new_verdict_json["verdict"] != old_verdict_json["verdict"]
+        
+        if is_overturned:
+            challenge.status = "RESOLVED_OVERTURNED"
+            reward_amount = challenge.stake + 5 * 10**18  # Refund + 5 GEN bonus
+            self.emit_transfer(challenge.challenger, reward_amount)
+            artwork.verdict = new_verdict_str
+        else:
+            challenge.status = "RESOLVED_UPHELD"
+            # Stake is retained in the contract
+            
+        challenge.new_verdict = new_verdict_str
+        artwork.status = "VERIFIED"  # Return to VERIFIED status
+        
+        self.challenges[artwork_id] = challenge
+        self.artworks[artwork_id] = artwork
+
     @gl.public.view
     def getVerificationResult(self, artwork_id: str) -> str:
         if artwork_id not in self.artworks:
             raise Exception("Artwork not found")
             
         artwork = self.artworks[artwork_id]
-        
-        # Parse source_urls from storage JSON
         source_urls_list = json.loads(artwork.source_urls)
         
-        # Parse verdict if it exists
         verdict_data = None
         if artwork.verdict:
             verdict_data = json.loads(artwork.verdict)
@@ -201,5 +393,27 @@ It is mandatory that you respond only using the JSON format above, nothing else.
             "source_urls": source_urls_list,
             "status": artwork.status,
             "verdict": verdict_data
+        }
+        return json.dumps(result)
+
+    @gl.public.view
+    def getChallenge(self, artwork_id: str) -> str:
+        if artwork_id not in self.challenges:
+            return ""
+            
+        challenge = self.challenges[artwork_id]
+        evidence_urls_list = json.loads(challenge.evidence_urls)
+        
+        new_verdict_data = None
+        if challenge.new_verdict:
+            new_verdict_data = json.loads(challenge.new_verdict)
+            
+        result = {
+            "artwork_id": challenge.artwork_id,
+            "challenger": challenge.challenger.as_hex,
+            "stake": challenge.stake,
+            "evidence_urls": evidence_urls_list,
+            "status": challenge.status,
+            "new_verdict": new_verdict_data
         }
         return json.dumps(result)
