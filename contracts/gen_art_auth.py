@@ -20,7 +20,7 @@ class Artwork:
 class Challenge:
     artwork_id: str
     challenger: Address
-    stake: int
+    stake: u256  # Using GenLayer sized integer for storage
     evidence_urls: str  # JSON-encoded list of strings
     status: str  # "PENDING", "RESOLVED_OVERTURNED", "RESOLVED_UPHELD"
     new_verdict: str  # JSON-encoded result
@@ -30,11 +30,11 @@ class Contract(gl.Contract):
     artwork_url_to_id: TreeMap[str, str]
     challenges: TreeMap[str, Challenge]
     next_artwork_id: str
-    min_challenge_stake: int
+    min_challenge_stake: u256  # Using GenLayer sized integer for storage
 
     def __init__(self):
         self.next_artwork_id = "1"
-        self.min_challenge_stake = 10 * 10**18  # 10 GEN
+        self.min_challenge_stake = u256(10 * 10**18)  # 10 GEN
 
     def _verify(self, artwork_url: str, source_urls_json: str) -> str:
         def get_verdict() -> str:
@@ -326,7 +326,7 @@ It is mandatory that you respond only using the JSON format above, nothing else.
         challenge = Challenge(
             artwork_id=artwork_id,
             challenger=gl.message.sender_address,
-            stake=gl.message.value,
+            stake=u256(gl.message.value),
             evidence_urls=json.dumps(evidence_list),
             status="PENDING",
             new_verdict=""
@@ -361,8 +361,11 @@ It is mandatory that you respond only using the JSON format above, nothing else.
         
         if is_overturned:
             challenge.status = "RESOLVED_OVERTURNED"
-            reward_amount = challenge.stake + 5 * 10**18  # Refund + 5 GEN bonus
-            self.emit_transfer(challenge.challenger, reward_amount)
+            reward_amount = int(challenge.stake) + 5 * 10**18  # Refund + 5 GEN bonus
+            
+            # Safe value transfer using gl.get_contract_at(recipient).emit_transfer(value)
+            gl.get_contract_at(challenge.challenger).emit_transfer(value=u256(reward_amount))
+            
             artwork.verdict = new_verdict_str
         else:
             challenge.status = "RESOLVED_UPHELD"
@@ -411,7 +414,7 @@ It is mandatory that you respond only using the JSON format above, nothing else.
         result = {
             "artwork_id": challenge.artwork_id,
             "challenger": challenge.challenger.as_hex,
-            "stake": challenge.stake,
+            "stake": int(challenge.stake),
             "evidence_urls": evidence_urls_list,
             "status": challenge.status,
             "new_verdict": new_verdict_data

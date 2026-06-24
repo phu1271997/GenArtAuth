@@ -1,0 +1,29 @@
+# Operating System Trash
+.DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+ehthumbs.db
+Thumbs.db
+
+# Python compilation & testing cache
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+.pytest_cache/
+artifacts/
+.cache/
+gltest.config.yaml
+
+# Next.js build & local environment
+frontend/.next/
+frontend/out/
+frontend/node_modules/
+frontend/.env*.local
+
+# Node package lock / logs
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
