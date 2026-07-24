@@ -148,7 +148,8 @@ export default function Dashboard() {
       const txHash = await client.writeContract({
         address: contractAddress,
         functionName: "resolveChallenge",
-        args: [artworkId]
+        args: [artworkId],
+        value: BigInt(0)
       });
 
       alert(`Supreme AI Jury consensus execution completed! TxHash: ${txHash}`);

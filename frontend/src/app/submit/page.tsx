@@ -35,10 +35,11 @@ export default function SubmitArtwork() {
       const txHash = await client.writeContract({
         address: process.env.NEXT_PUBLIC_GENLAYER_CONTRACT_ADDRESS as `0x${string}`,
         functionName: "submitArtwork",
-        args: [artworkUrl, sourceUrls]
+        args: [artworkUrl, sourceUrls],
+        value: BigInt(5) * BigInt(10) ** BigInt(18) // 5 GEN submitter bond funds any overturn reward
       });
-      
-      alert(`Artwork submitted to GenLayer Intelligence! TxHash: ${txHash}`);
+
+      alert(`Artwork submitted to GenLayer Intelligence! 5 GEN bond locked. TxHash: ${txHash}`);
       setArtworkUrl("");
       setSourceUrls([]);
     } catch (error: any) {
@@ -153,7 +154,7 @@ export default function SubmitArtwork() {
             </button>
           )}
           <p className="text-center text-xs text-gray-500 mt-4">
-            Fee: 1 GEN per verification. Results will be permanently stored on GenLayer.
+            Submitter bond: 5 GEN locked. Refunded if verdict survives dispute, forfeited to the challenger if the verdict is overturned.
           </p>
         </div>
       </motion.form>
