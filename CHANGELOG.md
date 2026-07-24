@@ -4,6 +4,25 @@ All notable changes to the **GenArtAuth** project are documented in this file.
 
 ---
 
+## [Milestone 4] - Deployable Head & Solvent Dispute Economics
+### Fixed
+- **Contract class discovery**: renamed the entry-point class from the reserved `Contract` name back to a domain-specific identifier `GenArtAuth` (matching the official `FootballBets` / `PatternTest` boilerplate convention). The `Contract`-named class collided with `gl.Contract` symbol lookups and prevented the GenLayer validator from identifying the intelligent contract at deploy time.
+- **Insolvent overturn payout**: the previous head paid `stake + 5 GEN bonus` (15 GEN) on a first overturn while the contract had only received the 10 GEN challenger stake — reward path was unfunded. Every refund and reward is now fully collateralised on-chain before the resolver runs.
+
+### Added
+- **Submitter Bond**: `submitArtwork` is now `@gl.public.write.payable` and requires a minimum bond of **5 GEN** (`min_submitter_bond`) locked with each submission. The bond is recorded on the `Artwork` storage struct (`submitter_bond: u256`).
+- **Solvent dispute payout**:
+  - On **overturn**: challenger receives `challenge.stake + artwork.submitter_bond` (10 + 5 = 15 GEN). Contract holds exactly that amount before the transfer, so it can never owe more than it received.
+  - On **uphold**: submitter's bond is refunded; challenger's stake is slashed into the protocol treasury.
+- New edge-case test `test_edge_case_insufficient_bond` guarding the bond floor.
+
+### Changed
+- Value transfers migrated to the official `@gl.evm.contract_interface` recipient pattern (matching `genlayer-studio/examples/contracts/faucet.py`).
+- Contract header bumped to `# v0.2.17` to align with the latest GenLayer stdlib examples.
+- Frontend `submit/page.tsx` now attaches the 5 GEN bond value to the `submitArtwork` transaction and surfaces the bond mechanics in copy.
+
+---
+
 ## [Milestone 3] - Frontend & Engineering Polish
 ### Added
 - Created a robust automated test suite in `tests/test_gen_art_auth.py` utilizing `genlayer-test` (`pytest` fixtures).
