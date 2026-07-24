@@ -19,7 +19,7 @@ import { useEffect, useState } from "react";
 import { useAccount } from "wagmi";
 
 export default function Dashboard() {
-  const { isConnected } = useAccount();
+  const { address, isConnected } = useAccount();
   const [results, setResults] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [activeTab, setActiveTab] = useState<"all" | "disputed">("all");
@@ -35,7 +35,8 @@ export default function Dashboard() {
     setLoading(true);
     try {
       const { createClient } = await import("genlayer-js");
-      const client = createClient();
+      const { testnetBradbury } = await import("genlayer-js/chains");
+      const client = createClient({ chain: testnetBradbury });
       const contractAddress = process.env.NEXT_PUBLIC_GENLAYER_CONTRACT_ADDRESS as `0x${string}`;
       
       const fetchedResults = [];
@@ -106,7 +107,7 @@ export default function Dashboard() {
   };
 
   const submitChallenge = async () => {
-    if (!selectedArtwork || !isConnected) return;
+    if (!selectedArtwork || !isConnected || !address) return;
     if (evidenceUrls.length === 0) {
       alert("Please provide at least one evidence URL.");
       return;
@@ -115,7 +116,12 @@ export default function Dashboard() {
     setIsChallenging(true);
     try {
       const { createClient } = await import("genlayer-js");
-      const client = createClient({ provider: (window as any).ethereum });
+      const { testnetBradbury } = await import("genlayer-js/chains");
+      const client = createClient({
+        chain: testnetBradbury,
+        account: address as `0x${string}`,
+        provider: (window as any).ethereum,
+      });
       const contractAddress = process.env.NEXT_PUBLIC_GENLAYER_CONTRACT_ADDRESS as `0x${string}`;
 
       // Call payable challengeVerdict with 10 GEN stake
@@ -139,10 +145,19 @@ export default function Dashboard() {
   };
 
   const triggerResolve = async (artworkId: string) => {
+    if (!address) {
+      alert("Connect your wallet to resolve the dispute.");
+      return;
+    }
     setIsResolving(artworkId);
     try {
       const { createClient } = await import("genlayer-js");
-      const client = createClient({ provider: (window as any).ethereum });
+      const { testnetBradbury } = await import("genlayer-js/chains");
+      const client = createClient({
+        chain: testnetBradbury,
+        account: address as `0x${string}`,
+        provider: (window as any).ethereum,
+      });
       const contractAddress = process.env.NEXT_PUBLIC_GENLAYER_CONTRACT_ADDRESS as `0x${string}`;
 
       const txHash = await client.writeContract({

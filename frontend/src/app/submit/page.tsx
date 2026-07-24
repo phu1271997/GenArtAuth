@@ -6,7 +6,7 @@ import { Upload, Plus, X, ArrowRight, Link as LinkIcon } from "lucide-react";
 import { useAccount } from "wagmi";
 
 export default function SubmitArtwork() {
-  const { isConnected } = useAccount();
+  const { address, isConnected } = useAccount();
   const [artworkUrl, setArtworkUrl] = useState("");
   const [sourceUrls, setSourceUrls] = useState<string[]>([]);
   const [newSource, setNewSource] = useState("");
@@ -25,13 +25,18 @@ export default function SubmitArtwork() {
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!artworkUrl || !isConnected) return;
-    
+    if (!artworkUrl || !isConnected || !address) return;
+
     setIsSubmitting(true);
     try {
       const { createClient } = await import("genlayer-js");
-      const client = createClient({ provider: (window as any).ethereum });
-      
+      const { testnetBradbury } = await import("genlayer-js/chains");
+      const client = createClient({
+        chain: testnetBradbury,
+        account: address as `0x${string}`,
+        provider: (window as any).ethereum,
+      });
+
       const txHash = await client.writeContract({
         address: process.env.NEXT_PUBLIC_GENLAYER_CONTRACT_ADDRESS as `0x${string}`,
         functionName: "submitArtwork",

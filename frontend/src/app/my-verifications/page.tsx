@@ -16,7 +16,8 @@ export default function MyVerifications() {
     setLoading(true);
     try {
       const { createClient } = await import("genlayer-js");
-      const client = createClient();
+      const { testnetBradbury } = await import("genlayer-js/chains");
+      const client = createClient({ chain: testnetBradbury });
       const contractAddress = process.env.NEXT_PUBLIC_GENLAYER_CONTRACT_ADDRESS as `0x${string}`;
       
       const fetchedResults = [];
