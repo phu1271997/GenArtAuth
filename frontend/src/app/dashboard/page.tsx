@@ -17,7 +17,7 @@ import {
 import Link from "next/link";
 import { useEffect, useState } from "react";
 import { useAccount } from "wagmi";
-import { GENLAYER_CONTRACT_ADDRESS } from "@/config/contract";
+import { GENLAYER_CONTRACT_ADDRESS, getGenLayerChain } from "@/config/contract";
 
 export default function Dashboard() {
   const { address, isConnected } = useAccount();
@@ -36,8 +36,8 @@ export default function Dashboard() {
     setLoading(true);
     try {
       const { createClient } = await import("genlayer-js");
-      const { testnetBradbury } = await import("genlayer-js/chains");
-      const client = createClient({ chain: testnetBradbury });
+      const chain = await getGenLayerChain((window as any).ethereum);
+      const client = createClient({ chain });
       const contractAddress = GENLAYER_CONTRACT_ADDRESS;
       
       const fetchedResults = [];
@@ -117,9 +117,9 @@ export default function Dashboard() {
     setIsChallenging(true);
     try {
       const { createClient } = await import("genlayer-js");
-      const { testnetBradbury } = await import("genlayer-js/chains");
+      const chain = await getGenLayerChain((window as any).ethereum);
       const client = createClient({
-        chain: testnetBradbury,
+        chain,
         account: address as `0x${string}`,
         provider: (window as any).ethereum,
       });
@@ -153,9 +153,9 @@ export default function Dashboard() {
     setIsResolving(artworkId);
     try {
       const { createClient } = await import("genlayer-js");
-      const { testnetBradbury } = await import("genlayer-js/chains");
+      const chain = await getGenLayerChain((window as any).ethereum);
       const client = createClient({
-        chain: testnetBradbury,
+        chain,
         account: address as `0x${string}`,
         provider: (window as any).ethereum,
       });

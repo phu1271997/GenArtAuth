@@ -4,7 +4,7 @@ import { useState } from "react";
 import { motion } from "framer-motion";
 import { Upload, Plus, X, ArrowRight, Link as LinkIcon } from "lucide-react";
 import { useAccount } from "wagmi";
-import { GENLAYER_CONTRACT_ADDRESS } from "@/config/contract";
+import { GENLAYER_CONTRACT_ADDRESS, getGenLayerChain } from "@/config/contract";
 
 export default function SubmitArtwork() {
   const { address, isConnected } = useAccount();
@@ -31,9 +31,9 @@ export default function SubmitArtwork() {
     setIsSubmitting(true);
     try {
       const { createClient } = await import("genlayer-js");
-      const { testnetBradbury } = await import("genlayer-js/chains");
+      const chain = await getGenLayerChain((window as any).ethereum);
       const client = createClient({
-        chain: testnetBradbury,
+        chain,
         account: address as `0x${string}`,
         provider: (window as any).ethereum,
       });

@@ -5,7 +5,7 @@ import { CheckCircle, Clock, ExternalLink, ShieldAlert, AlertTriangle, Wallet, C
 import { useAccount } from "wagmi";
 import Link from "next/link";
 import { useEffect, useState } from "react";
-import { GENLAYER_CONTRACT_ADDRESS } from "@/config/contract";
+import { GENLAYER_CONTRACT_ADDRESS, getGenLayerChain } from "@/config/contract";
 
 export default function MyVerifications() {
   const { address, isConnected } = useAccount();
@@ -17,8 +17,8 @@ export default function MyVerifications() {
     setLoading(true);
     try {
       const { createClient } = await import("genlayer-js");
-      const { testnetBradbury } = await import("genlayer-js/chains");
-      const client = createClient({ chain: testnetBradbury });
+      const chain = await getGenLayerChain((window as any).ethereum);
+      const client = createClient({ chain });
       const contractAddress = GENLAYER_CONTRACT_ADDRESS;
       
       const fetchedResults = [];
