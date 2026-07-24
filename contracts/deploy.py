@@ -53,66 +53,74 @@ def main():
     with open(contract_path, "r") as f:
         contract_code = f.read()
         
-    # 2. Check for deployment credentials
     private_key = os.getenv("PRIVATE_KEY", "")
-    rpc_url = os.getenv("GENLAYER_RPC_URL", "https://testnet.genlayer.network/rpc")
+    rpc_url = os.getenv("GENLAYER_RPC_URL", "")
     
-    if not private_key:
-        print("\n[Notice] No PRIVATE_KEY found in environment variables.")
-        print("For testing Intelligent Contracts on GenLayer, deploying via GenLayer Studio is highly recommended:")
-        print(" -> https://studio.genlayer.com/run-debug")
-        print("\nPlease follow these steps:")
-        print(" 1. Copy the contents of 'contracts/gen_art_auth.py'.")
-        print(" 2. Paste, compile, and deploy it inside the GenLayer Studio.")
-        print(" 3. Copy the deployed contract address.")
+    try:
+        import genlayer_py
+        from genlayer_py.client import GenLayerClient
+        from genlayer_py.accounts.account import Account
         
-        try:
-            addr = input("\nEnter your deployed contract address to sync with the Frontend: ").strip()
-            if addr:
-                update_frontend_env(addr)
-            else:
-                print("Skipped sync. Please manually set NEXT_PUBLIC_GENLAYER_CONTRACT_ADDRESS in frontend/.env.local.")
-        except KeyboardInterrupt:
-            print("\nSync cancelled.")
-    else:
-        print(f"\nDeploying to GenLayer RPC: {rpc_url}...")
-        try:
-            # Import SDK components dynamically
-            from genlayer_py.client import GenLayerClient
-            from genlayer_py.accounts import Account
+        if private_key:
+            if not private_key.startswith("0x"):
+                private_key = "0x" + private_key
+            account = Account.from_key(private_key)
+            print(f"Deployer Account (from PRIVATE_KEY): {account.address}")
+        else:
+            account = Account.create()
+            print(f"Generated Ephemeral Account: {account.address}")
+            print(f"Private Key: {account.key.hex()}")
             
+        print("Broadcasting deployment transaction to GenLayer Network...")
+        
+        # Try Bradbury testnet first, fallback to Studionet
+        client = None
+        tx_hash = None
+        if rpc_url:
             client = GenLayerClient(rpc_url)
-            account = Account.from_private_key(private_key)
+            tx_hash = client.deploy_contract(code=contract_code, account=account, args=[])
+        else:
+            try:
+                client = GenLayerClient(chain_config=genlayer_py.chains.testnet_bradbury)
+                print("Connected to testnet_bradbury RPC: https://rpc-bradbury.genlayer.com")
+                tx_hash = client.deploy_contract(code=contract_code, account=account, args=[])
+            except Exception as e:
+                print(f"Bradbury deployment attempt returned: {e}")
+                print("Falling back to GenLayer Studionet RPC...")
+                client = GenLayerClient(chain_config=genlayer_py.chains.studionet)
+                tx_hash = client.deploy_contract(code=contract_code, account=account, args=[])
+
+        print(f"\nTransaction Broadcast Successfully!")
+        print(f"Tx Hash: {tx_hash}")
+        print("Waiting for deployment receipt...")
+        
+        receipt = client.wait_for_transaction_receipt(tx_hash)
+        
+        # Receipt object handling
+        contract_address = None
+        if isinstance(receipt, dict):
+            data = receipt.get("data", {})
+            if isinstance(data, dict):
+                contract_address = data.get("contract_address")
+            if not contract_address:
+                contract_address = receipt.get("to_address") or receipt.get("contract_address")
+        else:
+            contract_address = getattr(receipt, "contract_address", None)
             
-            print(f"Deployer Account: {account.address}")
-            print("Broadcasting deployment transaction...")
-            
-            # Deploy contract on GenLayer
-            tx_hash = client.deploy_contract(
-                account=account,
-                code=contract_code,
-                args=[],
-                gas_limit=10000000
-            )
-            
-            print(f"Transaction Broadcast! Hash: {tx_hash}")
-            print("Waiting for deployment receipt (this may take a few seconds)...")
-            
-            receipt = client.wait_for_transaction_receipt(tx_hash)
-            contract_address = receipt.contract_address
-            
-            print(f"\n[Success] Contract deployed successfully!")
-            print(f"Contract Address: {contract_address}")
-            
-            # Sync with frontend
+        print(f"\n[Success] Contract deployed successfully!")
+        print(f"Contract Address: {contract_address}")
+        print(f"Deployment Tx Hash: {tx_hash}")
+        
+        if contract_address:
             update_frontend_env(contract_address)
-            
-        except ImportError:
-            print("\nError: genlayer-py client libraries are missing for programmatic deployment.")
-            print("Please deploy via GenLayer Studio instead and copy the address.")
-        except Exception as e:
-            print(f"\nDeployment failed: {str(e)}")
-            print("Please verify your RPC connection, balance, and private key.")
+        return contract_address, tx_hash
+        
+    except ImportError:
+        print("\nError: genlayer-py client libraries are missing for programmatic deployment.")
+        print("Please deploy via GenLayer Studio instead and copy the address.")
+    except Exception as e:
+        print(f"\nDeployment failed: {str(e)}")
+        print("Please verify your RPC connection, balance, and private key.")
 
 if __name__ == "__main__":
     main()
