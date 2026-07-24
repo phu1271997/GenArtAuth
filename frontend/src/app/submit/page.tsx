@@ -4,6 +4,7 @@ import { useState } from "react";
 import { motion } from "framer-motion";
 import { Upload, Plus, X, ArrowRight, Link as LinkIcon } from "lucide-react";
 import { useAccount } from "wagmi";
+import { GENLAYER_CONTRACT_ADDRESS } from "@/config/contract";
 
 export default function SubmitArtwork() {
   const { address, isConnected } = useAccount();
@@ -38,7 +39,7 @@ export default function SubmitArtwork() {
       });
 
       const txHash = await client.writeContract({
-        address: process.env.NEXT_PUBLIC_GENLAYER_CONTRACT_ADDRESS as `0x${string}`,
+        address: GENLAYER_CONTRACT_ADDRESS,
         functionName: "submitArtwork",
         args: [artworkUrl, sourceUrls],
         value: BigInt(5) * BigInt(10) ** BigInt(18) // 5 GEN submitter bond funds any overturn reward

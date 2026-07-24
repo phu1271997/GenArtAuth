@@ -17,6 +17,7 @@ import {
 import Link from "next/link";
 import { useEffect, useState } from "react";
 import { useAccount } from "wagmi";
+import { GENLAYER_CONTRACT_ADDRESS } from "@/config/contract";
 
 export default function Dashboard() {
   const { address, isConnected } = useAccount();
@@ -37,7 +38,7 @@ export default function Dashboard() {
       const { createClient } = await import("genlayer-js");
       const { testnetBradbury } = await import("genlayer-js/chains");
       const client = createClient({ chain: testnetBradbury });
-      const contractAddress = process.env.NEXT_PUBLIC_GENLAYER_CONTRACT_ADDRESS as `0x${string}`;
+      const contractAddress = GENLAYER_CONTRACT_ADDRESS;
       
       const fetchedResults = [];
       // Scan for the first 15 artwork IDs
@@ -122,7 +123,7 @@ export default function Dashboard() {
         account: address as `0x${string}`,
         provider: (window as any).ethereum,
       });
-      const contractAddress = process.env.NEXT_PUBLIC_GENLAYER_CONTRACT_ADDRESS as `0x${string}`;
+      const contractAddress = GENLAYER_CONTRACT_ADDRESS;
 
       // Call payable challengeVerdict with 10 GEN stake
       const txHash = await client.writeContract({
@@ -158,7 +159,7 @@ export default function Dashboard() {
         account: address as `0x${string}`,
         provider: (window as any).ethereum,
       });
-      const contractAddress = process.env.NEXT_PUBLIC_GENLAYER_CONTRACT_ADDRESS as `0x${string}`;
+      const contractAddress = GENLAYER_CONTRACT_ADDRESS;
 
       const txHash = await client.writeContract({
         address: contractAddress,
