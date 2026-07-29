@@ -71,24 +71,18 @@ def main():
             print(f"Generated Ephemeral Account: {account.address}")
             print(f"Private Key: {account.key.hex()}")
             
-        print("Broadcasting deployment transaction to GenLayer Network...")
-        
-        # Try Bradbury testnet first, fallback to Studionet
-        client = None
-        tx_hash = None
+        print("Broadcasting deployment transaction to GenLayer Studionet...")
+
+        # Studionet is the ONLY supported network for this project.
+        # Do not fallback to Bradbury / Asimov — mixing networks yields
+        # "contract code not found" and untrackable wallet-balance mismatches.
         if rpc_url:
             client = GenLayerClient(rpc_url)
-            tx_hash = client.deploy_contract(code=contract_code, account=account, args=[])
         else:
-            try:
-                client = GenLayerClient(chain_config=genlayer_py.chains.testnet_bradbury)
-                print("Connected to testnet_bradbury RPC: https://rpc-bradbury.genlayer.com")
-                tx_hash = client.deploy_contract(code=contract_code, account=account, args=[])
-            except Exception as e:
-                print(f"Bradbury deployment attempt returned: {e}")
-                print("Falling back to GenLayer Studionet RPC...")
-                client = GenLayerClient(chain_config=genlayer_py.chains.studionet)
-                tx_hash = client.deploy_contract(code=contract_code, account=account, args=[])
+            client = GenLayerClient(chain_config=genlayer_py.chains.studionet)
+            print("Connected to GenLayer Studionet RPC: https://studio.genlayer.com/api")
+
+        tx_hash = client.deploy_contract(code=contract_code, account=account, args=[])
 
         print(f"\nTransaction Broadcast Successfully!")
         print(f"Tx Hash: {tx_hash}")

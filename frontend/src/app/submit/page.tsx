@@ -4,7 +4,7 @@ import { useState } from "react";
 import { motion } from "framer-motion";
 import { Upload, Plus, X, ArrowRight, Link as LinkIcon } from "lucide-react";
 import { useAccount } from "wagmi";
-import { GENLAYER_CONTRACT_ADDRESS, getGenLayerChain } from "@/config/contract";
+import { GENLAYER_CONTRACT_ADDRESS, getGenLayerChain, getGenLayerProvider } from "@/config/contract";
 
 export default function SubmitArtwork() {
   const { address, isConnected } = useAccount();
@@ -31,11 +31,12 @@ export default function SubmitArtwork() {
     setIsSubmitting(true);
     try {
       const { createClient } = await import("genlayer-js");
-      const chain = await getGenLayerChain((window as any).ethereum);
+      const walletProvider = (window as any).ethereum;
+      const chain = await getGenLayerChain(walletProvider);
       const client = createClient({
         chain,
         account: address as `0x${string}`,
-        provider: (window as any).ethereum,
+        provider: getGenLayerProvider(walletProvider),
       });
 
       const txHash = await client.writeContract({
@@ -64,7 +65,7 @@ export default function SubmitArtwork() {
         className="mb-8 text-center"
       >
         <h1 className="text-3xl font-bold text-white mb-2">Submit Artwork for Verification</h1>
-        <p className="text-gray-400">Our AI agents will analyze provenance, history, and style.</p>
+        <p className="text-gray-400">Our AI validators analyze provenance, history, and source evidence.</p>
       </motion.div>
 
       <motion.form 
@@ -94,7 +95,7 @@ export default function SubmitArtwork() {
 
         {/* Source URLs */}
         <div className="space-y-2 pt-4">
-          <label className="text-sm font-medium text-gray-300 ml-1">Original Sources (Optional)</label>
+          <label className="text-sm font-medium text-gray-300 ml-1">Original Sources (Required)</label>
           <p className="text-xs text-gray-500 ml-1 mb-2">Add DeviantArt, Behance, or old social media links to help the AI establish provenance.</p>
           
           <div className="flex gap-2">
@@ -144,7 +145,7 @@ export default function SubmitArtwork() {
           ) : (
             <button
               type="submit"
-              disabled={isSubmitting}
+              disabled={isSubmitting || sourceUrls.length === 0}
               className="w-full flex items-center justify-center gap-2 py-4 rounded-xl bg-primary text-white font-bold hover:bg-primary/90 transition-all disabled:opacity-50 shadow-[0_0_20px_rgba(139,92,246,0.3)]"
             >
               {isSubmitting ? (

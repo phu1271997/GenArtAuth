@@ -17,7 +17,7 @@ import {
 import Link from "next/link";
 import { useEffect, useState } from "react";
 import { useAccount } from "wagmi";
-import { GENLAYER_CONTRACT_ADDRESS, getGenLayerChain } from "@/config/contract";
+import { GENLAYER_CONTRACT_ADDRESS, getGenLayerChain, getGenLayerProvider } from "@/config/contract";
 
 export default function Dashboard() {
   const { address, isConnected } = useAccount();
@@ -64,7 +64,7 @@ export default function Dashboard() {
                 if (challengeRes && challengeRes !== "") {
                   challenge = typeof challengeRes === "string" ? JSON.parse(challengeRes) : challengeRes;
                 }
-              } catch (e) {
+              } catch {
                 // Silently ignore if no challenge exists
               }
 
@@ -79,7 +79,7 @@ export default function Dashboard() {
               });
             }
           }
-        } catch (e) {
+        } catch {
           // Break loop on first missing sequential ID
           break;
         }
@@ -117,11 +117,12 @@ export default function Dashboard() {
     setIsChallenging(true);
     try {
       const { createClient } = await import("genlayer-js");
-      const chain = await getGenLayerChain((window as any).ethereum);
+      const walletProvider = (window as any).ethereum;
+      const chain = await getGenLayerChain(walletProvider);
       const client = createClient({
         chain,
         account: address as `0x${string}`,
-        provider: (window as any).ethereum,
+        provider: getGenLayerProvider(walletProvider),
       });
       const contractAddress = GENLAYER_CONTRACT_ADDRESS;
 
@@ -153,11 +154,12 @@ export default function Dashboard() {
     setIsResolving(artworkId);
     try {
       const { createClient } = await import("genlayer-js");
-      const chain = await getGenLayerChain((window as any).ethereum);
+      const walletProvider = (window as any).ethereum;
+      const chain = await getGenLayerChain(walletProvider);
       const client = createClient({
         chain,
         account: address as `0x${string}`,
-        provider: (window as any).ethereum,
+        provider: getGenLayerProvider(walletProvider),
       });
       const contractAddress = GENLAYER_CONTRACT_ADDRESS;
 

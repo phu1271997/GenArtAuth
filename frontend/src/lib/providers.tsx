@@ -3,24 +3,12 @@
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import React, { ReactNode } from "react";
 import { createConfig, WagmiProvider, http } from "wagmi";
-import { defineChain } from "viem";
-
-const genLayerTestnet = defineChain({
-  id: 2981,
-  name: "GenLayer Testnet",
-  nativeCurrency: { name: "GenLayer", symbol: "GEN", decimals: 18 },
-  rpcUrls: {
-    default: { http: ["https://testnet.genlayer.network"] }, // Mock URL, adjust if needed
-  },
-  blockExplorers: {
-    default: { name: "GenExplorer", url: "https://explorer.genlayer.network" },
-  },
-});
+import { studionet } from "genlayer-js/chains";
 
 const config = createConfig({
-  chains: [genLayerTestnet],
+  chains: [studionet],
   transports: {
-    [genLayerTestnet.id]: http(),
+    [studionet.id]: http(),
   },
 });
 

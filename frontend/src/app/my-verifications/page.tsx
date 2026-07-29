@@ -1,7 +1,7 @@
 "use client";
 
 import { motion } from "framer-motion";
-import { CheckCircle, Clock, ExternalLink, ShieldAlert, AlertTriangle, Wallet, Coins } from "lucide-react";
+import { CheckCircle, Clock, ExternalLink, ShieldAlert, AlertTriangle, Wallet } from "lucide-react";
 import { useAccount } from "wagmi";
 import Link from "next/link";
 import { useEffect, useState } from "react";
@@ -46,7 +46,7 @@ export default function MyVerifications() {
                   if (challengeRes && challengeRes !== "") {
                     challenge = typeof challengeRes === "string" ? JSON.parse(challengeRes) : challengeRes;
                   }
-                } catch (e) {
+                } catch {
                   // Ignore
                 }
 
@@ -60,7 +60,7 @@ export default function MyVerifications() {
               }
             }
           }
-        } catch (e) {
+        } catch {
           break;
         }
       }
@@ -78,6 +78,8 @@ export default function MyVerifications() {
     } else {
       setLoading(false);
     }
+  // The address and connection state are the only inputs to this initial fetch.
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [address, isConnected]);
 
   if (!isConnected) {

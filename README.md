@@ -2,8 +2,8 @@
 
 GenArtAuth is an on-chain "AI Art Detective" dApp that verifies the authenticity of digital artworks and NFTs using GenLayer's Intelligent Contracts. By leveraging LLM-based multi-validator consensus, Wayback Machine historical crawling, and a locked-stake dispute mechanism, GenArtAuth protects creators from plagiarism, re-minting, and copyright disputes entirely on-chain.
 
-- **Live Contract (Bradbury Testnet):** `0xC3B94461a00Ed36432f32e76C4a05C391ab91A0E`
-- **Entry class:** `GenArtAuth` (see `contracts/gen_art_auth.py`)
+- **Live Contract (GenLayer Studionet):** `0xC00FDc21EdCC4D07a0c8d585fDEE01B07Fb8FCA1`
+- **Entry class:** `Contract` (required by the GenLayer schema loader; see `contracts/gen_art_auth.py`)
 
 ---
 
@@ -73,27 +73,28 @@ GenArtAuth includes a comprehensive unit testing suite built with the `genlayer-
 
 ### Option A: Using GenLayer Studio (Recommended)
 1. Navigate to [GenLayer Studio](https://studio.genlayer.com/run-debug).
-2. Create a new file and paste the contents of [contracts/gen_art_auth.py](file:///Users/peter/Downloads/AI/GenArtAuth/contracts/gen_art_auth.py).
-3. Compile and Deploy the contract to the GenLayer Testnet.
-4. Copy the deployed **Contract Address**.
-5. Run the deployment script to sync with the frontend:
+2. Create a new file and paste the contents of `contracts/gen_art_auth.py`.
+3. Compile and Deploy the contract to **GenLayer Studionet** (the hosted Studio network — never a testnet build).
+4. Click the deploy transaction and confirm `Result: SUCCESS` (not just `Status: FINALIZED`).
+5. Copy the deployed **Contract Address** and run the sync helper:
    ```bash
    python3 contracts/deploy.py
    ```
    *Paste your contract address when prompted to automatically write it to `frontend/.env.local`.*
 
-### Option B: Programmatic Deployment
-If you have a private key and RPC endpoint configured in your environment:
+### Option B: Programmatic Deployment (Studionet)
+If you have a Studionet-funded private key configured in your environment:
 1. Setup your `.env` file:
    ```env
-   PRIVATE_KEY="your_private_key_here"
-   GENLAYER_RPC_URL="https://testnet.genlayer.network/rpc"
+   PRIVATE_KEY="your_studionet_private_key_here"
+   # Optional: override the default Studionet RPC.
+   GENLAYER_RPC_URL="https://studio.genlayer.com/api"
    ```
 2. Run the deployer:
    ```bash
    python3 contracts/deploy.py
    ```
-   *The script will deploy the contract, wait for the receipt, and automatically configure the frontend environment.*
+   *The script deploys to Studionet, waits for the receipt, and auto-configures the frontend environment. Fund the deployer wallet from the Studio **Accounts** panel — the public testnet faucet funds a different network and will not work here.*
 
 ---
 

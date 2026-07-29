@@ -121,6 +121,33 @@ def test_edge_case_insufficient_bond(direct_vm, direct_deploy):
         _submit(contract, direct_vm, artwork_url, source_urls, bond=1 * 10**18)
     assert "Insufficient submitter bond" in str(excinfo.value)
 
+def test_edge_case_empty_challenge_evidence(direct_vm, direct_deploy):
+    contract = direct_deploy("contracts/gen_art_auth.py")
+    direct_vm.mock_web(r".*", {"status": 200, "body": "Mock data"})
+    direct_vm.mock_llm(r".*", {
+        "verdict": "ORIGINAL",
+        "action": "MINT_SAFE",
+        "confidence": 90,
+        "earliest_source": "https://example.com/source",
+        "reason": "Provenance is consistent.",
+    })
+
+    artwork_id = _submit(
+        contract,
+        direct_vm,
+        "https://example.com/art",
+        ["https://example.com/source"],
+    )
+    contract.verifyAuthenticity(artwork_id)
+
+    direct_vm.value = CHALLENGE_STAKE
+    try:
+        with pytest.raises(Exception) as excinfo:
+            contract.challengeVerdict(artwork_id, [])
+    finally:
+        direct_vm.value = 0
+    assert "Challenge evidence URLs cannot be empty" in str(excinfo.value)
+
 def test_edge_case_invalid_status_transition(direct_vm, direct_deploy):
     contract = direct_deploy("contracts/gen_art_auth.py")
     artwork_url = "https://opensea.io/assets/1"

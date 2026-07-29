@@ -1,18 +1,9 @@
-# v0.2.17
+# v0.2.16
 # { "Depends": "py-genlayer:1jb45aa8ynh2a9c9xn3b7qqh8sm5q93hwfp7jqmwsfhh8jpz09h6" }
 
 import json
 from dataclasses import dataclass
 from genlayer import *
-
-
-@gl.evm.contract_interface
-class _Recipient:
-    class View:
-        pass
-
-    class Write:
-        pass
 
 
 @allow_storage
@@ -38,7 +29,7 @@ class Challenge:
     new_verdict: str  # JSON-encoded result
 
 
-class GenArtAuth(gl.Contract):
+class Contract(gl.Contract):
     artworks: TreeMap[str, Artwork]
     artwork_url_to_id: TreeMap[str, str]
     challenges: TreeMap[str, Challenge]
@@ -321,6 +312,9 @@ It is mandatory that you respond only using the JSON format above, nothing else.
         if gl.message.value < self.min_challenge_stake:
             raise Exception("Insufficient stake. Min stake is 10 GEN")
 
+        if len(evidence_urls) == 0:
+            raise Exception("Challenge evidence URLs cannot be empty")
+
         if artwork_id in self.challenges:
             raise Exception("Artwork is already challenged")
 
@@ -373,7 +367,7 @@ It is mandatory that you respond only using the JSON format above, nothing else.
             # Fully funded: contract holds stake_amount + bond_amount.
             reward_amount = stake_amount + bond_amount
             if reward_amount > 0:
-                _Recipient(challenge.challenger).emit_transfer(value=u256(reward_amount))
+                gl.get_contract_at(challenge.challenger).emit_transfer(value=u256(reward_amount))
             # Submitter bond consumed by reward.
             artwork.submitter_bond = u256(0)
             artwork.verdict = new_verdict_str
@@ -381,7 +375,7 @@ It is mandatory that you respond only using the JSON format above, nothing else.
             challenge.status = "RESOLVED_UPHELD"
             # Verdict stood. Refund submitter's bond; challenger stake slashed into treasury.
             if bond_amount > 0:
-                _Recipient(artwork.submitter).emit_transfer(value=u256(bond_amount))
+                gl.get_contract_at(artwork.submitter).emit_transfer(value=u256(bond_amount))
             artwork.submitter_bond = u256(0)
 
         challenge.new_verdict = new_verdict_str

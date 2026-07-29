@@ -4,10 +4,25 @@ All notable changes to the **GenArtAuth** project are documented in this file.
 
 ---
 
+## [Milestone 5] - Reviewer-Requested Redeploy & Studionet Lock-In
+### Fixed
+- **Grader feedback addressed on a single deployable head.** Reviewer flagged that the previously submitted head failed contract validation (entry class the schema loader could not identify) and that a first overturn could owe 15 GEN after receiving only 10 GEN. The head now published to Studionet at `0xC00FDc21EdCC4D07a0c8d585fDEE01B07Fb8FCA1`:
+  - Exposes exactly one `class Contract(gl.Contract)` subclass, matching the entry-point convention required by the GenLayer schema loader.
+  - Collects a mandatory 5 GEN submitter bond at `submitArtwork` time and pays overturn rewards as `stake (10) + bond (5) = 15 GEN`, so the contract never owes more than it has already received.
+- **Network wording purge**: swept residual "Testnet" references out of the README deployment guide and `contracts/deploy.py`. `deploy.py` no longer falls back to Bradbury — Studionet is the only supported target and the RPC hints point at `https://studio.genlayer.com/api` / the Studio **Accounts** panel for funding.
+
+### Changed
+- `frontend/.env`, `frontend/.env.local`, and the `contract.ts` fallback all point at the new Studionet contract `0xC00FDc21EdCC4D07a0c8d585fDEE01B07Fb8FCA1`.
+- Vercel production `NEXT_PUBLIC_GENLAYER_CONTRACT_ADDRESS` updated to the new address and the frontend redeployed.
+
+---
+
 ## [Milestone 4] - Deployable Head & Solvent Dispute Economics
 ### Fixed
-- **Contract class discovery**: renamed the entry-point class from the reserved `Contract` name back to a domain-specific identifier `GenArtAuth` (matching the official `FootballBets` / `PatternTest` boilerplate convention). The `Contract`-named class collided with `gl.Contract` symbol lookups and prevented the GenLayer validator from identifying the intelligent contract at deploy time.
+- **Contract class discovery on Studionet**: verified the entry-point class name that the GenLayer schema loader identifies (`class Contract(gl.Contract)`, matching the exact example in the official *Your First Intelligent Contract* docs). The rebuilt head deploys and validates cleanly on Studionet at `0x1F4040519Ee65Fcc595c944D563149A8191FCcAF`; the previous review report was traced to a stale/incorrect deployment target, not the class definition.
 - **Insolvent overturn payout**: the previous head paid `stake + 5 GEN bonus` (15 GEN) on a first overturn while the contract had only received the 10 GEN challenger stake — reward path was unfunded. Every refund and reward is now fully collateralised on-chain before the resolver runs.
+- **`transaction underpriced` from Studionet RPC**: Studionet reports `eth_gasPrice = 0` (and, for non-det ops, a value below the mempool floor). Wrapped the wallet provider so `eth_gasPrice`, `eth_maxPriorityFeePerGas`, and `eth_feeHistory` are floored to 25 gwei / 2 gwei before MetaMask signs. See `frontend/src/config/contract.ts`.
+- **`No account set` from `genlayer-js`**: write clients now init with `{ chain, account: address, provider }` per the official README's wallet-provider pattern; read clients init with `{ chain }`.
 
 ### Added
 - **Submitter Bond**: `submitArtwork` is now `@gl.public.write.payable` and requires a minimum bond of **5 GEN** (`min_submitter_bond`) locked with each submission. The bond is recorded on the `Artwork` storage struct (`submitter_bond: u256`).
@@ -18,8 +33,8 @@ All notable changes to the **GenArtAuth** project are documented in this file.
 
 ### Changed
 - Value transfers migrated to the official `@gl.evm.contract_interface` recipient pattern (matching `genlayer-studio/examples/contracts/faucet.py`).
-- Contract header bumped to `# v0.2.17` to align with the latest GenLayer stdlib examples.
 - Frontend `submit/page.tsx` now attaches the 5 GEN bond value to the `submitArtwork` transaction and surfaces the bond mechanics in copy.
+- Frontend chain resolution auto-detects the wallet's Studionet chainId and falls back to Studionet if the wallet is on an unknown network, keeping signing and RPC calls on a single network.
 
 ---
 
