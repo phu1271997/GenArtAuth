@@ -87,6 +87,18 @@ export function getGenLayerProvider(provider?: any) {
 
 export { MIN_GAS_PRICE_HEX, MIN_PRIORITY_FEE_HEX, toHex };
 
+export const GENLAYER_EXPLORER_BASE = "https://genlayer-explorer.vercel.app";
+
+export function explorerAddressUrl(addr?: string | null) {
+  if (!addr) return GENLAYER_EXPLORER_BASE;
+  return `${GENLAYER_EXPLORER_BASE}/address/${addr}`;
+}
+
+export function explorerTxUrl(hash?: string | null) {
+  if (!hash) return GENLAYER_EXPLORER_BASE;
+  return `${GENLAYER_EXPLORER_BASE}/tx/${hash}`;
+}
+
 export async function getGenLayerChain(provider?: any) {
   let chainId: number | undefined;
 

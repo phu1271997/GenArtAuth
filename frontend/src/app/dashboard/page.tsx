@@ -17,7 +17,8 @@ import {
 import Link from "next/link";
 import { useEffect, useState } from "react";
 import { useAccount } from "wagmi";
-import { GENLAYER_CONTRACT_ADDRESS, getGenLayerChain, getGenLayerProvider } from "@/config/contract";
+import { GENLAYER_CONTRACT_ADDRESS, getGenLayerChain, getGenLayerProvider, explorerAddressUrl } from "@/config/contract";
+import { ReputationBadge } from "@/components/ReputationBadge";
 
 export default function Dashboard() {
   const { address, isConnected } = useAccount();
@@ -355,7 +356,18 @@ export default function Dashboard() {
                   <div className="space-y-4 lg:col-span-1">
                     <div>
                       <h4 className="text-xs font-bold uppercase text-gray-500 mb-1.5">Submitted By</h4>
-                      <p className="text-sm font-mono text-gray-300 break-all">{item.submitter}</p>
+                      <a
+                        href={explorerAddressUrl(item.submitter)}
+                        target="_blank"
+                        rel="noreferrer"
+                        className="text-sm font-mono text-gray-300 hover:text-primary break-all inline-flex items-center gap-1"
+                      >
+                        {item.submitter}
+                        <ExternalLink className="w-3 h-3 flex-shrink-0" />
+                      </a>
+                      <div className="mt-2">
+                        <ReputationBadge address={item.submitter} compact />
+                      </div>
                     </div>
                     <div>
                       <h4 className="text-xs font-bold uppercase text-gray-500 mb-1.5">Historical Sources</h4>
@@ -453,7 +465,18 @@ export default function Dashboard() {
                             <div className="grid grid-cols-1 md:grid-cols-2 gap-4 text-xs">
                               <div>
                                 <span className="text-gray-500 font-bold uppercase block">Challenger Address</span>
-                                <span className="font-mono text-gray-300 break-all">{item.challenge.challenger}</span>
+                                <a
+                                  href={explorerAddressUrl(item.challenge.challenger)}
+                                  target="_blank"
+                                  rel="noreferrer"
+                                  className="font-mono text-gray-300 hover:text-primary break-all inline-flex items-center gap-1"
+                                >
+                                  {item.challenge.challenger}
+                                  <ExternalLink className="w-3 h-3 flex-shrink-0" />
+                                </a>
+                                <div className="mt-1.5">
+                                  <ReputationBadge address={item.challenge.challenger} compact />
+                                </div>
                               </div>
                               <div>
                                 <span className="text-gray-500 font-bold uppercase block">Spam Penalty Lock (Stake)</span>

@@ -5,7 +5,8 @@ import { CheckCircle, Clock, ExternalLink, ShieldAlert, AlertTriangle, Wallet } 
 import { useAccount } from "wagmi";
 import Link from "next/link";
 import { useEffect, useState } from "react";
-import { GENLAYER_CONTRACT_ADDRESS, getGenLayerChain } from "@/config/contract";
+import { GENLAYER_CONTRACT_ADDRESS, getGenLayerChain, explorerAddressUrl } from "@/config/contract";
+import { ReputationBadge } from "@/components/ReputationBadge";
 
 export default function MyVerifications() {
   const { address, isConnected } = useAccount();
@@ -103,7 +104,7 @@ export default function MyVerifications() {
 
   return (
     <div className="container mx-auto px-4 py-12 max-w-5xl">
-      <div className="flex flex-col md:flex-row justify-between items-start md:items-end mb-12 gap-6">
+      <div className="flex flex-col md:flex-row justify-between items-start md:items-end mb-8 gap-6">
         <div>
           <h1 className="text-4xl font-black tracking-tight text-white mb-2">My Verifications</h1>
           <p className="text-gray-400">History of digital artworks you submitted for on-chain AI forensic audits.</p>
@@ -114,6 +115,23 @@ export default function MyVerifications() {
           </button>
         </Link>
       </div>
+
+      {address && (
+        <div className="mb-10 glass-panel p-6 rounded-2xl border border-white/5 flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
+          <div className="min-w-0">
+            <div className="text-xs uppercase font-bold text-gray-500 mb-1">On-Chain Reputation</div>
+            <a
+              href={explorerAddressUrl(address)}
+              target="_blank"
+              rel="noreferrer"
+              className="text-sm font-mono text-gray-300 hover:text-primary break-all"
+            >
+              {address}
+            </a>
+          </div>
+          <ReputationBadge address={address} />
+        </div>
+      )}
 
       {loading ? (
         <div className="flex flex-col items-center justify-center p-24">

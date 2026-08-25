@@ -9,6 +9,13 @@ GenArtAuth is an on-chain "AI Art Detective" dApp that verifies the authenticity
 
 ## Key Features (Milestone-Grade)
 
+### 0. Trust Layer v1 (Milestone 6)
+- **On-chain reputation system**: ELO-style score (starts at 1000, floor 0) per address, plus monotonic counters for submissions, verified stands, verdicts overturned, and challenge wins/losses. Exposed via `getReputation(address_str)` and rendered as tier badges in the UI.
+- **Multi-perspective AI verification**: initial `_verify` now demands an explicit Forensic + Provenance + Skeptic synthesis (previously only the challenge jury did). The equivalence principle validates that both validator outputs cover all three perspectives.
+- **Prompt-injection canary defense**: crawled web content is wrapped in `<<<UNTRUSTED_BEGIN>>> … <<<UNTRUSTED_END>>>` delimiters and every prompt embeds a do-not-echo sentinel. Verdicts that echo the sentinel are rejected before storage is written.
+- **Self-challenge guard + treasury counter**: `challengeVerdict` blocks `sender == submitter`; `treasury_slashed` records cumulative GEN captured from upheld challenges.
+- **Full docs bundle**: `docs/ARCHITECTURE.md`, `docs/SECURITY.md`, `docs/ECONOMICS.md` (Mermaid diagrams + threat model + reputation deltas + tier bands).
+
 ### 1. Multi-Source Provenance & Timeline Crawling
 - Uses `gl.nondet.web.render` to fetch real-time metadata from the target artwork and its source references.
 - Integrates **Wayback Machine APIs** to retrieve historical creation and archive timestamps on-chain, establishing an undeniable historical timeline of first appearance.
@@ -35,14 +42,19 @@ GenArtAuth is an on-chain "AI Art Detective" dApp that verifies the authenticity
 ```text
 GenArtAuth/
 ├── contracts/               # GenLayer Intelligent Contracts
-│   ├── gen_art_auth.py      # The core AI contract (Semantic Consensus, AI Jury, Stakes)
+│   ├── gen_art_auth.py      # Core AI contract (Semantic Consensus, AI Jury, Stakes, Reputation)
 │   └── deploy.py            # Deployment orchestrator & frontend sync script
 ├── tests/                   # Automated Testing Suite
-│   └── test_gen_art_auth.py # Unit & integration tests (Direct Mode VM, Mocks, Stake checks)
+│   └── test_gen_art_auth.py # 14 tests: happy paths, edge cases, disputes, reputation, injection
+├── docs/                    # Extended documentation (Milestone 6)
+│   ├── ARCHITECTURE.md      # Mermaid diagrams + storage layout + lifecycles
+│   ├── SECURITY.md          # Threat model + mitigations
+│   └── ECONOMICS.md         # GEN flows + reputation deltas + tier bands
 ├── frontend/                # Next.js 15 Web App
 │   ├── src/
 │   │   ├── app/             # App Router pages (Home, Submit, Dashboard, My Verifications)
-│   │   ├── components/      # UI components (Navbar, Modals, Badges)
+│   │   ├── components/      # UI components (Navbar, ReputationBadge, Modals)
+│   │   ├── config/          # Contract address + gas-floor provider + explorer helpers
 │   │   └── lib/             # Web3 Providers & wagmi configurations
 │   ├── package.json
 │   └── tailwind.config.ts
