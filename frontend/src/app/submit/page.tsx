@@ -5,6 +5,7 @@ import { motion } from "framer-motion";
 import { Upload, Plus, X, ArrowRight, Link as LinkIcon } from "lucide-react";
 import { useAccount } from "wagmi";
 import { GENLAYER_CONTRACT_ADDRESS, getGenLayerChain, getGenLayerProvider } from "@/config/contract";
+import { extractContractError } from "@/lib/errors";
 
 export default function SubmitArtwork() {
   const { address, isConnected } = useAccount();
@@ -49,9 +50,9 @@ export default function SubmitArtwork() {
       alert(`Artwork submitted to GenLayer Intelligence! 5 GEN bond locked. TxHash: ${txHash}`);
       setArtworkUrl("");
       setSourceUrls([]);
-    } catch (error: any) {
+    } catch (error: unknown) {
       console.error(error);
-      alert(`Submission failed: ${error.message || "Check console for details."}`);
+      alert(`Submission failed: ${extractContractError(error)}`);
     } finally {
       setIsSubmitting(false);
     }

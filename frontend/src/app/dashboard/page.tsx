@@ -19,6 +19,7 @@ import { useEffect, useState } from "react";
 import { useAccount } from "wagmi";
 import { GENLAYER_CONTRACT_ADDRESS, getGenLayerChain, getGenLayerProvider, explorerAddressUrl } from "@/config/contract";
 import { ReputationBadge } from "@/components/ReputationBadge";
+import { extractContractError } from "@/lib/errors";
 
 export default function Dashboard() {
   const { address, isConnected } = useAccount();
@@ -139,9 +140,9 @@ export default function Dashboard() {
       setSelectedArtwork(null);
       setEvidenceUrls([]);
       fetchResults();
-    } catch (error: any) {
+    } catch (error: unknown) {
       console.error(error);
-      alert(`Dispute submission failed: ${error.message || "Please check your balance and connection."}`);
+      alert(`Dispute submission failed: ${extractContractError(error)}`);
     } finally {
       setIsChallenging(false);
     }
@@ -173,9 +174,9 @@ export default function Dashboard() {
 
       alert(`Supreme AI Jury consensus execution completed! TxHash: ${txHash}`);
       fetchResults();
-    } catch (error: any) {
+    } catch (error: unknown) {
       console.error(error);
-      alert(`Resolution failed: ${error.message || "Check console for details."}`);
+      alert(`Resolution failed: ${extractContractError(error)}`);
     } finally {
       setIsResolving(null);
     }

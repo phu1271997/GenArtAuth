@@ -29,6 +29,9 @@ export function Navbar() {
           <Link href="/dashboard" className="text-sm font-medium text-gray-300 hover:text-white transition-colors">
             Dashboard
           </Link>
+          <Link href="/leaderboard" className="text-sm font-medium text-gray-300 hover:text-white transition-colors">
+            Leaderboard
+          </Link>
           <Link href="/my-verifications" className="text-sm font-medium text-gray-300 hover:text-white transition-colors">
             My Verifications
           </Link>

@@ -4,6 +4,21 @@ All notable changes to the **GenArtAuth** project are documented in this file.
 
 ---
 
+## [Milestone 6.1] - Trust Layer v1 UX & Ecosystem Bundle
+
+### Added
+- **Trust Leaderboard page** (`/leaderboard`): scans all on-chain artworks + challenges, collects unique participant addresses, batch-reads `getReputation` for each, and ranks by score with medal indicators (🥇🥈🥉) plus tier badges. Also surfaces aggregate stats — total participants, verdicts that stood, and `treasury_slashed` (GEN).
+- **ErrorBoundary component** wrapping `<main>` in the root layout. Any unhandled render error now shows a coloured recovery panel with a "Try again" reset button instead of a blank screen.
+- **`extractContractError` helper** (`frontend/src/lib/errors.ts`): walks the nested `shortMessage / cause / data / error` envelopes viem + genlayer-js + MetaMask each use, so users see the real revert reason (`"Insufficient submitter bond. Min bond is 5 GEN"`) instead of a raw JSON-RPC dump. Wired into every `writeContract` catch block on `/submit` and `/dashboard`.
+- **Loading skeletons** on the Leaderboard route (rank/address/score/tier/activity placeholder grid) — replaces the generic spinner pattern for that page.
+- **Leaderboard link in Navbar + home page CTA**, so first-time visitors discover the reputation surface without hunting.
+- **Studionet address updated** to the new Milestone 6 head `0x5e85C3319FA74948d753168a38d6b510C3E4FC9e` in `frontend/src/config/contract.ts` (with an inline comment pointing at the previous Milestone 5 head to avoid regressions).
+
+### Changed
+- Old fallback contract address `0xC00FDc21EdCC4D07a0c8d585fDEE01B07Fb8FCA1` retired from the code path; README documents both heads and clarifies the Milestone 5 head does not carry reputation storage.
+
+---
+
 ## [Milestone 6] - Trust Layer v1: Reputation, Multi-Perspective AI, Prompt-Injection Defense
 
 ### Added

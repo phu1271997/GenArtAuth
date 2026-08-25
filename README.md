@@ -2,18 +2,21 @@
 
 GenArtAuth is an on-chain "AI Art Detective" dApp that verifies the authenticity of digital artworks and NFTs using GenLayer's Intelligent Contracts. By leveraging LLM-based multi-validator consensus, Wayback Machine historical crawling, and a locked-stake dispute mechanism, GenArtAuth protects creators from plagiarism, re-minting, and copyright disputes entirely on-chain.
 
-- **Live Contract (GenLayer Studionet):** `0xC00FDc21EdCC4D07a0c8d585fDEE01B07Fb8FCA1`
+- **Live Contract (GenLayer Studionet, Milestone 6 head):** `0x5e85C3319FA74948d753168a38d6b510C3E4FC9e`
+- Previous Milestone 5 head (pre-reputation, do not use): `0xC00FDc21EdCC4D07a0c8d585fDEE01B07Fb8FCA1`
 - **Entry class:** `Contract` (required by the GenLayer schema loader; see `contracts/gen_art_auth.py`)
 
 ---
 
 ## Key Features (Milestone-Grade)
 
-### 0. Trust Layer v1 (Milestone 6)
+### 0. Trust Layer v1 (Milestone 6 + 6.1)
 - **On-chain reputation system**: ELO-style score (starts at 1000, floor 0) per address, plus monotonic counters for submissions, verified stands, verdicts overturned, and challenge wins/losses. Exposed via `getReputation(address_str)` and rendered as tier badges in the UI.
 - **Multi-perspective AI verification**: initial `_verify` now demands an explicit Forensic + Provenance + Skeptic synthesis (previously only the challenge jury did). The equivalence principle validates that both validator outputs cover all three perspectives.
 - **Prompt-injection canary defense**: crawled web content is wrapped in `<<<UNTRUSTED_BEGIN>>> … <<<UNTRUSTED_END>>>` delimiters and every prompt embeds a do-not-echo sentinel. Verdicts that echo the sentinel are rejected before storage is written.
 - **Self-challenge guard + treasury counter**: `challengeVerdict` blocks `sender == submitter`; `treasury_slashed` records cumulative GEN captured from upheld challenges.
+- **Trust Leaderboard page** (`/leaderboard`): live on-chain ranking of participants by reputation score with tier badges and aggregate stats.
+- **Error handling polish**: `ErrorBoundary` catches unhandled render errors; `extractContractError` unwraps nested viem/MetaMask envelopes so users see the real revert reason.
 - **Full docs bundle**: `docs/ARCHITECTURE.md`, `docs/SECURITY.md`, `docs/ECONOMICS.md` (Mermaid diagrams + threat model + reputation deltas + tier bands).
 
 ### 1. Multi-Source Provenance & Timeline Crawling

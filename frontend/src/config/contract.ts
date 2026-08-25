@@ -10,9 +10,12 @@ const MIN_GAS_PRICE_BIGINT = BigInt(MIN_GAS_PRICE_HEX);
 const MIN_PRIORITY_FEE_HEX = "0x77359400"; // 2 gwei
 const MIN_PRIORITY_FEE_BIGINT = BigInt(MIN_PRIORITY_FEE_HEX);
 
+// Milestone 6 (Trust Layer v1) contract head on Studionet.
+// The Milestone 5 head (0xC00FDc21EdCC4D07a0c8d585fDEE01B07Fb8FCA1) does not
+// carry the reputation storage — do not point the frontend at it.
 export const GENLAYER_CONTRACT_ADDRESS = (
   process.env.NEXT_PUBLIC_GENLAYER_CONTRACT_ADDRESS ||
-  "0xC00FDc21EdCC4D07a0c8d585fDEE01B07Fb8FCA1"
+  "0x5e85C3319FA74948d753168a38d6b510C3E4FC9e"
 ) as `0x${string}`;
 
 const toHex = (value: bigint) => `0x${value.toString(16)}`;
