@@ -1,0 +1,9 @@
+{
+  "artwork_url": "https://opensea.io/assets/ethereum/0xd07dc4262bcdbf85190c01c996b4c06a461d2430/9998",
+  "source_urls": [
+    "https://knowyourmeme.com/memes/rare-pepe",
+    "https://twitter.com/pepethefrog/status/1"
+  ],
+  "value_wei": "5000000000000000000",
+  "note": "A meme-style NFT with overlapping timelines across several social sources. Consensus should still reach a stable verdict; useful for stress-testing the multi-perspective prompt and the ±15 confidence tolerance."
+}

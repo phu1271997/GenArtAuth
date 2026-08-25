@@ -1,0 +1,9 @@
+{
+  "artwork_id": "1",
+  "evidence_urls": [
+    "https://knowyourmeme.com/some-earlier-alleged-source",
+    "https://web.archive.org/web/2020*/some-alleged-earlier-post"
+  ],
+  "value_wei": "10000000000000000000",
+  "note": "Bad-faith challenge attempting to overturn a genuine BAYC verdict with weak alleged earlier posts. Well-behaved jury should uphold ORIGINAL. Challenger loses 10 GEN stake to treasury; challenger reputation -50; submitter reputation +50."
+}

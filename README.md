@@ -1,6 +1,20 @@
 # GenArtAuth - AI-Powered On-Chain Digital Art Authenticator & Dispute Registry
 
+[![Tests](https://github.com/phu1271997/GenArtAuth/actions/workflows/tests.yml/badge.svg)](https://github.com/phu1271997/GenArtAuth/actions/workflows/tests.yml)
+
+> 🇻🇳 Tiếng Việt: xem [README.vi.md](./README.vi.md).
+
 GenArtAuth is an on-chain "AI Art Detective" dApp that verifies the authenticity of digital artworks and NFTs using GenLayer's Intelligent Contracts. By leveraging LLM-based multi-validator consensus, Wayback Machine historical crawling, and a locked-stake dispute mechanism, GenArtAuth protects creators from plagiarism, re-minting, and copyright disputes entirely on-chain.
+
+### Documentation
+
+- [`docs/ARCHITECTURE.md`](./docs/ARCHITECTURE.md) — Mermaid diagrams, storage layout, non-determinism boundary.
+- [`docs/API.md`](./docs/API.md) — full contract API reference (writes, views, JSON schemas, revert strings, TS/Python examples).
+- [`docs/ECONOMICS.md`](./docs/ECONOMICS.md) — GEN flows, reputation deltas, tier bands.
+- [`docs/SECURITY.md`](./docs/SECURITY.md) — threat model + Trust Layer v1 mitigations.
+- [`docs/samples/`](./docs/samples/) — ready-to-paste sample submissions and matching challenge payloads.
+- [`CONTRIBUTING.md`](./CONTRIBUTING.md) — dev workflow + ground rules for PRs.
+- [`CHANGELOG.md`](./CHANGELOG.md) — milestone history.
 
 - **Live Contract (GenLayer Studionet, Milestone 6 head):** `0x5e85C3319FA74948d753168a38d6b510C3E4FC9e`
 - Previous Milestone 5 head (pre-reputation, do not use): `0xC00FDc21EdCC4D07a0c8d585fDEE01B07Fb8FCA1`

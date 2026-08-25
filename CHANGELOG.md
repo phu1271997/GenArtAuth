@@ -4,6 +4,24 @@ All notable changes to the **GenArtAuth** project are documented in this file.
 
 ---
 
+## [Milestone 6.2] - Trust Layer v1 Onboarding, Docs & CI Bundle
+
+### Added
+- **Interactive 4-step onboarding modal** (`frontend/src/components/OnboardingModal.tsx`) triggered on first visit. Walkthrough covers: submit → verify → dispute → reputation. Dismissed to `localStorage.genartauth.onboarded.v1`; "Show tour" affordance in the navbar reopens it any time.
+- **Full contract API reference** at `docs/API.md`: every write + view with param types, JSON return schemas, revert strings, TypeScript + Python client examples.
+- **`CONTRIBUTING.md`** at the repo root: dev workflow, ground rules for PRs (nondet wrapper, str-keyed TreeMaps, `bigint` in storage, star-import only), testing checklist, security-disclosure pointer.
+- **Bilingual README**: new `README.vi.md` (Vietnamese short-form) linked from the top of the English `README.md`.
+- **Sample data bundle** under `docs/samples/`: three ready-to-paste submission JSONs (`01_bayc_original`, `02_plagiarised_mint`, `03_ambiguous_meme`) and two matching challenge payloads under `docs/samples/challenges/`. Each file includes the exact `value_wei` to attach.
+- **GitHub Actions CI** (`.github/workflows/tests.yml`): every push and PR runs `pytest tests/` under Python 3.13 with `genlayer-test` and builds the frontend under Node 20 with Turbopack. CI badge added to the top of the README.
+- **Dashboard loading skeleton**: replaces the generic spinner with three animated placeholder cards matching the real card layout.
+
+### Changed
+- README rewritten: adds a "Documentation" table of contents linking every doc + samples folder, and a CI badge and Vietnamese-README pointer at the top.
+
+Contract unchanged; no redeploy required.
+
+---
+
 ## [Milestone 6.1] - Trust Layer v1 UX & Ecosystem Bundle
 
 ### Added

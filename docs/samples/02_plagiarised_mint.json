@@ -1,0 +1,9 @@
+{
+  "artwork_url": "https://foundation.app/mint/some-random-new-mint",
+  "source_urls": [
+    "https://www.deviantart.com/famousartist/art/original-art-2015-8493021",
+    "https://web.archive.org/web/2015*/deviantart.com/famousartist"
+  ],
+  "value_wei": "5000000000000000000",
+  "note": "Fresh 2026 Foundation mint whose imagery matches a DeviantArt piece uploaded in 2015. Wayback confirms the 2015 source predates the mint. Expected verdict: COPY / BLOCK_MINT with high confidence."
+}

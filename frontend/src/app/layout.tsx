@@ -4,6 +4,7 @@ import "./globals.css";
 import { Providers } from "@/lib/providers";
 import { Navbar } from "@/components/Navbar";
 import { ErrorBoundary } from "@/components/ErrorBoundary";
+import { OnboardingModal } from "@/components/OnboardingModal";
 
 const inter = Inter({ subsets: ["latin"] });
 
@@ -26,6 +27,7 @@ export default function RootLayout({
             <main className="flex-1">
               <ErrorBoundary label="AppRoot">{children}</ErrorBoundary>
             </main>
+            <OnboardingModal />
           </div>
         </Providers>
       </body>

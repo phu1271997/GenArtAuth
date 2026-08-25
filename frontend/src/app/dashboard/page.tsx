@@ -237,10 +237,7 @@ export default function Dashboard() {
 
       {/* Main Panel */}
       {loading ? (
-        <div className="flex flex-col items-center justify-center p-24">
-          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-primary mb-4"></div>
-          <p className="text-gray-400 text-sm">Querying GenLayer Intelligent State...</p>
-        </div>
+        <DashboardSkeleton />
       ) : filteredResults.length === 0 ? (
         <div className="glass-panel p-16 text-center rounded-3xl border border-white/5">
           <Scale className="w-12 h-12 text-gray-600 mx-auto mb-4" />
@@ -660,6 +657,34 @@ export default function Dashboard() {
           </div>
         )}
       </AnimatePresence>
+    </div>
+  );
+}
+
+function DashboardSkeleton() {
+  return (
+    <div className="grid grid-cols-1 gap-6" aria-label="Loading verifications">
+      {[0, 1, 2].map((i) => (
+        <div key={i} className="glass-panel p-8 rounded-3xl border border-white/5 space-y-6">
+          <div className="flex flex-wrap items-center gap-3">
+            <div className="h-5 w-16 rounded bg-white/5 animate-pulse" />
+            <div className="h-5 w-32 rounded bg-white/5 animate-pulse" />
+            <div className="ml-auto h-9 w-40 rounded-xl bg-white/5 animate-pulse" />
+          </div>
+          <div className="h-4 w-3/4 rounded bg-white/5 animate-pulse" />
+          <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 pt-4 border-t border-white/5">
+            <div className="space-y-3">
+              <div className="h-3 w-24 rounded bg-white/5 animate-pulse" />
+              <div className="h-3 w-full rounded bg-white/5 animate-pulse" />
+              <div className="h-3 w-3/4 rounded bg-white/5 animate-pulse" />
+            </div>
+            <div className="lg:col-span-2 space-y-3">
+              <div className="h-3 w-20 rounded bg-white/5 animate-pulse" />
+              <div className="h-24 w-full rounded-2xl bg-white/5 animate-pulse" />
+            </div>
+          </div>
+        </div>
+      ))}
     </div>
   );
 }

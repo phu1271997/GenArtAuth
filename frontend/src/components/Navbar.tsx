@@ -5,6 +5,7 @@ import { useAccount, useChainId, useConnect, useDisconnect, useSwitchChain } fro
 import { injected } from "wagmi/connectors";
 import { ShieldCheck, Wallet } from "lucide-react";
 import { studionet } from "genlayer-js/chains";
+import { OnboardingReopenButton } from "@/components/OnboardingModal";
 
 export function Navbar() {
   const { address, isConnected } = useAccount();
@@ -35,6 +36,7 @@ export function Navbar() {
           <Link href="/my-verifications" className="text-sm font-medium text-gray-300 hover:text-white transition-colors">
             My Verifications
           </Link>
+          <OnboardingReopenButton />
         </div>
 
         <div>
