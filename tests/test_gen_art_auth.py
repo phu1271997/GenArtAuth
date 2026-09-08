@@ -465,3 +465,170 @@ def test_reputation_score_floors_at_zero(direct_vm, direct_deploy, direct_alice,
     assert bob_rep["failed_challenges"] == 24
     assert bob_rep["score"] == 0
     assert bob_rep["tier"] == "UNTRUSTED"
+
+
+# ---------------------------------------------------------------------------
+# Milestone 7 — Provenance Registry & Certificate Layer
+# ---------------------------------------------------------------------------
+
+def _verify_original(contract, direct_vm, url, sources, confidence=95):
+    direct_vm.mock_web(r".*", {"status": 200, "body": "web content"})
+    direct_vm.mock_llm(
+        r".*FORENSIC PERSPECTIVE.*",
+        {
+            "verdict": "ORIGINAL",
+            "action": "MINT_SAFE",
+            "confidence": confidence,
+            "earliest_source": sources[0],
+            "matched_artwork_id": "",
+            "reason": "Forensic ok. Provenance ok. Skeptic ok. Registry: novel, no match.",
+        },
+    )
+    aid = _submit(contract, direct_vm, url, sources)
+    contract.verifyAuthenticity(aid)
+    return aid
+
+
+def test_certificate_minted_on_original(direct_vm, direct_deploy, direct_alice):
+    contract = direct_deploy("contracts/gen_art_auth.py")
+    direct_vm.sender = direct_alice
+
+    aid = _verify_original(
+        contract, direct_vm,
+        "https://opensea.io/assets/original-1",
+        ["https://twitter.com/artist/status/1"],
+        confidence=93,
+    )
+
+    cert = json.loads(contract.getCertificate(aid))
+    assert cert["serial"] == 1
+    assert cert["artwork_id"] == aid
+    assert cert["status"] == "VALID"
+    assert cert["confidence"] == 93
+    assert len(cert["certificate_hash"]) == 64  # sha256 hex
+
+    # Certificate is also surfaced on the verification result.
+    res = json.loads(contract.getVerificationResult(aid))
+    assert res["certificate"]["serial"] == 1
+    assert res["certificate"]["status"] == "VALID"
+
+
+def test_no_certificate_for_copy(direct_vm, direct_deploy, direct_alice):
+    contract = direct_deploy("contracts/gen_art_auth.py")
+    direct_vm.sender = direct_alice
+
+    direct_vm.mock_web(r".*", {"status": 200, "body": "web content"})
+    direct_vm.mock_llm(
+        r".*FORENSIC PERSPECTIVE.*",
+        {
+            "verdict": "COPY",
+            "action": "BLOCK_MINT",
+            "confidence": 88,
+            "earliest_source": "https://deviantart.com/older",
+            "matched_artwork_id": "",
+            "reason": "Forensic: copy. Provenance: older source. Skeptic: none. Registry: no match.",
+        },
+    )
+    aid = _submit(contract, direct_vm, "https://foundation.app/copy-1", ["https://deviantart.com/older"])
+    contract.verifyAuthenticity(aid)
+
+    assert contract.getCertificate(aid) == ""
+
+
+def test_registry_crossref_forces_copy(direct_vm, direct_deploy, direct_alice, direct_bob):
+    """A second submission the AI matches to a registered original is coerced
+    to COPY/BLOCK_MINT and gets no certificate, even if the model said ORIGINAL."""
+    contract = direct_deploy("contracts/gen_art_auth.py")
+
+    # First: a genuine original gets certified (serial #1).
+    direct_vm.sender = direct_alice
+    aid1 = _verify_original(
+        contract, direct_vm,
+        "https://opensea.io/assets/genesis",
+        ["https://twitter.com/artist/status/genesis"],
+    )
+    assert json.loads(contract.getCertificate(aid1))["status"] == "VALID"
+
+    # Second: model (buggy/attacker) claims ORIGINAL but flags a registry match
+    # to aid1. _clean_verdict must override to COPY.
+    # clear_mocks so the fresh matched-id response wins (first-registered mock
+    # otherwise takes precedence).
+    direct_vm.clear_mocks()
+    direct_vm.mock_web(r".*", {"status": 200, "body": "web content"})
+    direct_vm.sender = direct_bob
+    direct_vm.mock_llm(
+        r".*FORENSIC PERSPECTIVE.*",
+        {
+            "verdict": "ORIGINAL",
+            "action": "MINT_SAFE",
+            "confidence": 70,
+            "earliest_source": "https://opensea.io/assets/genesis",
+            "matched_artwork_id": aid1,
+            "reason": "Registry cross-reference: reproduces registered original.",
+        },
+    )
+    aid2 = _submit(contract, direct_vm, "https://foundation.app/remint-of-genesis", ["https://foundation.app/remint-of-genesis"])
+    contract.verifyAuthenticity(aid2)
+
+    res2 = json.loads(contract.getVerificationResult(aid2))
+    assert res2["verdict"]["verdict"] == "COPY"
+    assert res2["verdict"]["action"] == "BLOCK_MINT"
+    assert res2["verdict"]["matched_artwork_id"] == aid1
+    assert contract.getCertificate(aid2) == ""
+
+
+def test_registry_views(direct_vm, direct_deploy, direct_alice):
+    contract = direct_deploy("contracts/gen_art_auth.py")
+    direct_vm.sender = direct_alice
+
+    _verify_original(contract, direct_vm, "https://opensea.io/assets/a", ["https://twitter.com/a"])
+    _verify_original(contract, direct_vm, "https://opensea.io/assets/b", ["https://twitter.com/b"])
+
+    registry = json.loads(contract.getRegistry())
+    assert len(registry) == 2
+    # Newest first.
+    assert registry[0]["artwork_id"] == "2"
+    assert registry[0]["certificate_status"] == "VALID"
+    assert registry[0]["certificate_serial"] == 2
+
+    stats = json.loads(contract.getRegistryStats())
+    assert stats["total_artworks"] == 2
+    assert stats["originals"] == 2
+    assert stats["certificates_issued"] == 2
+    assert stats["certificates_valid"] == 2
+    assert stats["certificates_revoked"] == 0
+
+
+def test_certificate_revoked_on_overturn(direct_vm, direct_deploy, direct_alice, direct_bob):
+    contract = direct_deploy("contracts/gen_art_auth.py")
+
+    # Alice's piece is certified ORIGINAL (#1).
+    direct_vm.sender = direct_alice
+    aid = _verify_original(contract, direct_vm, "https://opensea.io/assets/disputed", ["https://twitter.com/disputed"])
+    assert json.loads(contract.getCertificate(aid))["status"] == "VALID"
+
+    # Bob challenges; jury overturns to COPY → certificate must be REVOKED.
+    direct_vm.sender = direct_bob
+    direct_vm.value = CHALLENGE_STAKE
+    contract.challengeVerdict(aid, ["https://deviantart.com/true-original"])
+    direct_vm.value = 0
+
+    direct_vm.mock_llm(
+        r".*Supreme AI Jury of GenArtAuth.*",
+        {
+            "verdict": "COPY",
+            "action": "BLOCK_MINT",
+            "confidence": 96,
+            "earliest_source": "https://deviantart.com/true-original",
+            "matched_artwork_id": "",
+            "reason": "Jury overturns: challenger evidence predates the target.",
+        },
+    )
+    contract.resolveChallenge(aid)
+
+    cert = json.loads(contract.getCertificate(aid))
+    assert cert["status"] == "REVOKED"
+
+    stats = json.loads(contract.getRegistryStats())
+    assert stats["certificates_revoked"] == 1
+    assert stats["certificates_valid"] == 0

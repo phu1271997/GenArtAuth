@@ -216,3 +216,59 @@ rep = json.loads(contract.getReputation(args=["0xabc…"]).call())
 | `Submitter cannot challenge their own verdict` | `challengeVerdict` |
 | `Artwork is already challenged` | `challengeVerdict` |
 | `Prompt-injection canary triggered: …` | `_detect_injection` |
+
+---
+
+## Milestone 7 — Registry & Certificate views
+
+### `verifyAuthenticity(artwork_id: str)` — updated
+
+Now snapshots the on-chain corpus of certified originals (`_collect_registry`, ≤5 newest) before the non-deterministic block and passes it to `_verify`. The verdict schema gains `matched_artwork_id` (id of a registered original this piece reproduces, or `""`). A clean `ORIGINAL` verdict mints a Certificate of Authenticity.
+
+Verdict JSON:
+```json
+{
+  "verdict": "ORIGINAL" | "COPY",
+  "action": "MINT_SAFE" | "BLOCK_MINT",
+  "confidence": 0,
+  "earliest_source": "https://…",
+  "matched_artwork_id": "",
+  "reason": "Forensic … Provenance … Skeptic … Registry cross-reference …"
+}
+```
+
+### `getCertificate(artwork_id: str) -> str`
+
+Returns the Certificate of Authenticity JSON, or `""` if none was minted.
+```json
+{
+  "serial": 1,
+  "artwork_id": "2",
+  "submitter": "0x…",
+  "artwork_url": "https://…",
+  "earliest_source": "https://…",
+  "confidence": 93,
+  "certificate_hash": "<sha256 hex>",
+  "status": "VALID" | "REVOKED"
+}
+```
+
+### `getRegistry() -> str`
+
+Returns a JSON list of every artwork (newest first): `{artwork_id, submitter, artwork_url, status, verdict, certificate_status, certificate_serial}`. Powers the `/registry` gallery.
+
+### `getRegistryStats() -> str`
+
+```json
+{
+  "total_artworks": 0,
+  "originals": 0,
+  "copies": 0,
+  "certificates_issued": 0,
+  "certificates_valid": 0,
+  "certificates_revoked": 0,
+  "treasury_slashed": 0
+}
+```
+
+`getVerificationResult` now embeds a `certificate` object (or `null`).

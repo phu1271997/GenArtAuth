@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import { useRouter } from "next/navigation";
 import { motion } from "framer-motion";
 import { Upload, Plus, X, ArrowRight, Link as LinkIcon } from "lucide-react";
 import { useAccount } from "wagmi";
@@ -8,6 +9,7 @@ import { GENLAYER_CONTRACT_ADDRESS, getGenLayerChain, getGenLayerProvider } from
 import { extractContractError } from "@/lib/errors";
 
 export default function SubmitArtwork() {
+  const router = useRouter();
   const { address, isConnected } = useAccount();
   const [artworkUrl, setArtworkUrl] = useState("");
   const [sourceUrls, setSourceUrls] = useState<string[]>([]);
@@ -47,9 +49,10 @@ export default function SubmitArtwork() {
         value: BigInt(5) * BigInt(10) ** BigInt(18) // 5 GEN submitter bond funds any overturn reward
       });
 
-      alert(`Artwork submitted to GenLayer Intelligence! 5 GEN bond locked. TxHash: ${txHash}`);
+      alert(`Artwork submitted! 5 GEN bond locked. TxHash: ${txHash}\n\nNext: open the Dashboard and click "Run AI Verification" to convene the GenLayer validators. A clean ORIGINAL verdict mints an on-chain Certificate of Authenticity.`);
       setArtworkUrl("");
       setSourceUrls([]);
+      router.push("/dashboard");
     } catch (error: unknown) {
       console.error(error);
       alert(`Submission failed: ${extractContractError(error)}`);

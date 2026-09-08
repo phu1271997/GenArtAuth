@@ -30,6 +30,9 @@ export function Navbar() {
           <Link href="/dashboard" className="text-sm font-medium text-gray-300 hover:text-white transition-colors">
             Dashboard
           </Link>
+          <Link href="/registry" className="text-sm font-medium text-gray-300 hover:text-white transition-colors">
+            Registry
+          </Link>
           <Link href="/leaderboard" className="text-sm font-medium text-gray-300 hover:text-white transition-colors">
             Leaderboard
           </Link>
