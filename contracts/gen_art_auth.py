@@ -48,6 +48,22 @@ class Artwork:
     submitter_bond: u256  # Locked GEN funding the challenger reward on overturn
 
 
+# Certificate of Authenticity issued on-chain when an artwork is verified
+# ORIGINAL. Immutable serial + deterministic content hash; a later overturn
+# revokes it (status flips to REVOKED) without deleting the historical record.
+@allow_storage
+@dataclass
+class Certificate:
+    serial: u256              # monotonic issuance number (#1, #2, ...)
+    artwork_id: str
+    submitter: Address
+    artwork_url: str
+    earliest_source: str
+    confidence: u256          # confidence of the ORIGINAL verdict at issuance
+    certificate_hash: str     # deterministic sha256 fingerprint
+    status: str               # "VALID" or "REVOKED"
+
+
 @allow_storage
 @dataclass
 class Challenge:
@@ -75,16 +91,23 @@ class Contract(gl.Contract):
     artwork_url_to_id: TreeMap[str, str]
     challenges: TreeMap[str, Challenge]
     reputations: TreeMap[str, Reputation]  # keyed by _addr_str(addr)
+    certificates: TreeMap[str, Certificate]  # keyed by artwork_id
     next_artwork_id: str
     min_challenge_stake: u256
     min_submitter_bond: u256
     treasury_slashed: u256  # cumulative GEN slashed from failed challenges
+    certificate_count: u256  # monotonic Certificate-of-Authenticity serial
+
+    # Max registered originals fed into a single verification as the
+    # cross-reference corpus. Bounds per-verification crawl cost.
+    REGISTRY_CROSSREF_LIMIT = 5
 
     def __init__(self):
         self.next_artwork_id = "1"
         self.min_challenge_stake = u256(10 * 10**18)  # 10 GEN
         self.min_submitter_bond = u256(5 * 10**18)   # 5 GEN, funds overturn reward
         self.treasury_slashed = u256(0)
+        self.certificate_count = u256(0)
 
     # ------------------------------------------------------------------
     # Reputation helpers
@@ -183,6 +206,9 @@ class Contract(gl.Contract):
         confidence = int(parsed.get("confidence", 0))
         earliest_source = str(parsed.get("earliest_source", ""))
         reason = str(parsed.get("reason", ""))
+        # Registry cross-reference: id of a previously registered ORIGINAL that
+        # this submission reproduces, or "" when the piece is novel.
+        matched_artwork_id = str(parsed.get("matched_artwork_id", "")).strip()
 
         if verdict not in ["ORIGINAL", "COPY"]:
             verdict = "COPY"
@@ -193,18 +219,25 @@ class Contract(gl.Contract):
         if confidence > 100:
             confidence = 100
 
+        # A piece that duplicates a registered original cannot itself be
+        # ORIGINAL — normalise defensively so the certificate layer stays sound.
+        if matched_artwork_id:
+            verdict = "COPY"
+            action = "BLOCK_MINT"
+
         return {
             "verdict": verdict,
             "action": action,
             "confidence": confidence,
             "earliest_source": earliest_source,
             "reason": reason,
+            "matched_artwork_id": matched_artwork_id,
         }
 
     # ------------------------------------------------------------------
     # Non-deterministic verification (initial + challenge)
     # ------------------------------------------------------------------
-    def _verify(self, artwork_url: str, source_urls_json: str) -> str:
+    def _verify(self, artwork_url: str, source_urls_json: str, registry_json: str) -> str:
         def get_verdict() -> str:
             try:
                 target_web_data = gl.nondet.web.render(artwork_url, mode="text")
@@ -218,6 +251,24 @@ class Contract(gl.Contract):
                     source_contents[src] = gl.nondet.web.render(src, mode="text")
                 except Exception as e:
                     source_contents[src] = f"Error rendering source: {str(e)}"
+
+            # Cross-reference corpus: crawl each already-registered ORIGINAL so
+            # the model can decide whether the target reproduces one of them.
+            registry_entries = json.loads(registry_json)
+            registry_contents = []
+            for entry in registry_entries:
+                reg_url = entry.get("artwork_url", "")
+                crawled = ""
+                try:
+                    crawled = gl.nondet.web.render(reg_url, mode="text")
+                except Exception as e:
+                    crawled = f"Error rendering registered original: {str(e)}"
+                registry_contents.append({
+                    "artwork_id": entry.get("artwork_id", ""),
+                    "artwork_url": reg_url,
+                    "earliest_source": entry.get("earliest_source", ""),
+                    "content": crawled,
+                })
 
             wayback_data = {}
             try:
@@ -244,7 +295,14 @@ You must analyze the target digital artwork from THREE independent perspectives 
   2. PROVENANCE PERSPECTIVE — chronological timeline using Wayback Machine snapshots. Which URL demonstrably existed first? Where does the first-appearance evidence collapse?
   3. SKEPTIC PERSPECTIVE — actively try to falsify the "ORIGINAL" hypothesis. Look for forged provenance, backdated posts, mirror uploads, or missing snapshots that would flip the verdict.
 
-Only after weighing all three perspectives may you emit the final verdict.
+REGISTRY CROSS-REFERENCE — you are also given the corpus of artworks already
+certified ORIGINAL by this contract. If the target is a reproduction, crop,
+re-mint, or close derivative of ANY registered original below, you MUST return
+verdict "COPY", action "BLOCK_MINT", and set "matched_artwork_id" to that
+registered artwork's id. If the target is genuinely novel, set
+"matched_artwork_id" to an empty string "".
+
+Only after weighing all three perspectives AND the registry cross-reference may you emit the final verdict.
 
 Target artwork URL: {artwork_url}
 
@@ -260,13 +318,17 @@ Source URLs crawled content (JSON):
 Wayback snapshots for source URLs (JSON):
 {self._wrap_untrusted(json.dumps({src: wayback_data.get(src, "") for src in source_urls}))}
 
+Registered ORIGINAL artworks already on-chain (JSON list of {{artwork_id, artwork_url, earliest_source, content}}):
+{self._wrap_untrusted(json.dumps(registry_contents))}
+
 Return ONLY a JSON object with EXACTLY this schema, and nothing else:
 {{
   "verdict": "ORIGINAL" | "COPY",
   "action": "MINT_SAFE" | "BLOCK_MINT",
   "confidence": <integer between 0 and 100>,
   "earliest_source": "<url of the earliest verified appearance>",
-  "reason": "<a compact synthesis explicitly referencing all three perspectives — Forensic / Provenance / Skeptic>"
+  "matched_artwork_id": "<id of a registered original this piece reproduces, or empty string>",
+  "reason": "<a compact synthesis explicitly referencing all three perspectives — Forensic / Provenance / Skeptic — plus the registry cross-reference conclusion>"
 }}
 """
 
@@ -284,9 +346,12 @@ Return ONLY a JSON object with EXACTLY this schema, and nothing else:
             "The responses are equivalent if they both agree on the same 'verdict' "
             "(ORIGINAL vs COPY) and the same 'action' (MINT_SAFE vs BLOCK_MINT), "
             "and their 'confidence' scores differ by no more than 15. "
+            "They must agree on 'matched_artwork_id' (both empty, or both naming "
+            "the same registered original). "
             "The 'earliest_source' should point to the same origin URL. "
             "The 'reason' fields must be semantically similar and must both "
-            "explicitly cover the Forensic, Provenance, and Skeptic perspectives."
+            "explicitly cover the Forensic, Provenance, and Skeptic perspectives "
+            "and the registry cross-reference."
         )
 
         return gl.eq_principle.prompt_comparative(get_verdict, principle)
@@ -360,6 +425,7 @@ Return ONLY a JSON object with EXACTLY this schema, and nothing else:
   "action": "MINT_SAFE" | "BLOCK_MINT",
   "confidence": <integer between 0 and 100>,
   "earliest_source": "<url of the earliest verified appearance>",
+  "matched_artwork_id": "<id of a registered original this piece reproduces, or empty string>",
   "reason": "<thorough synthesis covering Forensic, Provenance, and Skeptic perspectives>"
 }}
 """
@@ -378,6 +444,8 @@ Return ONLY a JSON object with EXACTLY this schema, and nothing else:
             "The responses are equivalent if they both agree on the same 'verdict' "
             "(ORIGINAL vs COPY) and the same 'action' (MINT_SAFE vs BLOCK_MINT), "
             "and their 'confidence' scores differ by no more than 15. "
+            "They must agree on 'matched_artwork_id' (both empty, or both naming "
+            "the same registered original). "
             "The 'earliest_source' should point to the same origin URL. "
             "The 'reason' fields must be semantically similar and must both "
             "explicitly cover the Forensic, Provenance, and Skeptic perspectives."
@@ -422,6 +490,80 @@ Return ONLY a JSON object with EXACTLY this schema, and nothing else:
         self._record_submission(gl.message.sender_address)
         return artwork_id
 
+    def _collect_registry(self, exclude_id: str) -> str:
+        """Gather the most recent registered ORIGINAL artworks as a JSON list.
+
+        Read entirely from deterministic code (before any nondet block) so the
+        corpus is identical for leader and every validator. Bounded to the last
+        REGISTRY_CROSSREF_LIMIT entries to cap per-verification crawl cost.
+        """
+        entries = []
+        max_id = int(self.next_artwork_id) - 1
+        # Walk newest → oldest so the freshest originals are cross-referenced.
+        for i in range(max_id, 0, -1):
+            if len(entries) >= self.REGISTRY_CROSSREF_LIMIT:
+                break
+            aid = str(i)
+            if aid == exclude_id or aid not in self.artworks:
+                continue
+            other = self.artworks[aid]
+            if other.status != "VERIFIED" or not other.verdict:
+                continue
+            try:
+                v = json.loads(other.verdict)
+            except Exception:
+                continue
+            if v.get("verdict") != "ORIGINAL":
+                continue
+            entries.append({
+                "artwork_id": aid,
+                "artwork_url": other.artwork_url,
+                "earliest_source": v.get("earliest_source", ""),
+            })
+        return json.dumps(entries)
+
+    def _issue_certificate(self, artwork_id: str, artwork: Artwork, verdict: dict) -> None:
+        """Mint an on-chain Certificate of Authenticity for an ORIGINAL verdict.
+
+        Deterministic content hash → every validator computes the same serial
+        and fingerprint. Re-issuing (e.g. a challenge that re-confirms ORIGINAL)
+        refreshes the existing serial rather than minting a duplicate.
+        """
+        import hashlib
+
+        existing_serial = None
+        if artwork_id in self.certificates:
+            existing_serial = int(self.certificates[artwork_id].serial)
+
+        if existing_serial is None:
+            serial = int(self.certificate_count) + 1
+            self.certificate_count = u256(serial)
+        else:
+            serial = existing_serial
+
+        submitter_key = _addr_str(artwork.submitter)
+        earliest = str(verdict.get("earliest_source", ""))
+        confidence = int(verdict.get("confidence", 0))
+        fingerprint_src = f"{serial}|{artwork_id}|{submitter_key}|{artwork.artwork_url}|{earliest}"
+        certificate_hash = hashlib.sha256(fingerprint_src.encode("utf-8")).hexdigest()
+
+        self.certificates[artwork_id] = Certificate(
+            serial=u256(serial),
+            artwork_id=artwork_id,
+            submitter=artwork.submitter,
+            artwork_url=artwork.artwork_url,
+            earliest_source=earliest,
+            confidence=u256(confidence),
+            certificate_hash=certificate_hash,
+            status="VALID",
+        )
+
+    def _revoke_certificate(self, artwork_id: str) -> None:
+        if artwork_id in self.certificates:
+            cert = self.certificates[artwork_id]
+            cert.status = "REVOKED"
+            self.certificates[artwork_id] = cert
+
     @gl.public.write
     def verifyAuthenticity(self, artwork_id: str) -> None:
         if artwork_id not in self.artworks:
@@ -431,14 +573,23 @@ Return ONLY a JSON object with EXACTLY this schema, and nothing else:
         if artwork.status != "PENDING":
             raise Exception("Artwork already verified or in progress")
 
+        # Snapshot the registered-originals corpus BEFORE entering the nondet
+        # block (storage is unreadable inside it; the value is closed over).
+        registry_json = self._collect_registry(artwork_id)
+
         artwork.status = "PROCESSING"
         self.artworks[artwork_id] = artwork
 
-        verdict_str = self._verify(artwork.artwork_url, artwork.source_urls)
+        verdict_str = self._verify(artwork.artwork_url, artwork.source_urls, registry_json)
 
         artwork.status = "VERIFIED"
         artwork.verdict = verdict_str
         self.artworks[artwork_id] = artwork
+
+        # Mint a Certificate of Authenticity only for a clean ORIGINAL verdict.
+        verdict = json.loads(verdict_str)
+        if verdict["verdict"] == "ORIGINAL":
+            self._issue_certificate(artwork_id, artwork, verdict)
 
     @gl.public.write.payable
     def challengeVerdict(self, artwork_id: str, evidence_urls: DynArray[str]) -> None:
@@ -514,6 +665,12 @@ Return ONLY a JSON object with EXACTLY this schema, and nothing else:
             artwork.submitter_bond = u256(0)
             artwork.verdict = new_verdict_str
 
+            # Certificate lifecycle follows the binding new verdict.
+            if new_verdict_json["verdict"] == "ORIGINAL":
+                self._issue_certificate(artwork_id, artwork, new_verdict_json)
+            else:
+                self._revoke_certificate(artwork_id)
+
             self._award_verdict_overturned(artwork.submitter)
             self._award_challenge_won(challenge.challenger)
         else:
@@ -549,6 +706,10 @@ Return ONLY a JSON object with EXACTLY this schema, and nothing else:
         if artwork.verdict:
             verdict_data = json.loads(artwork.verdict)
 
+        certificate_data = None
+        if artwork_id in self.certificates:
+            certificate_data = self._certificate_dict(self.certificates[artwork_id])
+
         result = {
             "artwork_id": artwork.artwork_id,
             "submitter": _addr_str(artwork.submitter),
@@ -557,6 +718,7 @@ Return ONLY a JSON object with EXACTLY this schema, and nothing else:
             "status": artwork.status,
             "verdict": verdict_data,
             "submitter_bond": int(artwork.submitter_bond),
+            "certificate": certificate_data,
         }
         return json.dumps(result)
 
@@ -622,6 +784,106 @@ Return ONLY a JSON object with EXACTLY this schema, and nothing else:
     @gl.public.view
     def getTreasuryBalance(self) -> str:
         return json.dumps({"treasury_slashed": int(self.treasury_slashed)})
+
+    def _certificate_dict(self, cert: Certificate) -> dict:
+        return {
+            "serial": int(cert.serial),
+            "artwork_id": cert.artwork_id,
+            "submitter": _addr_str(cert.submitter),
+            "artwork_url": cert.artwork_url,
+            "earliest_source": cert.earliest_source,
+            "confidence": int(cert.confidence),
+            "certificate_hash": cert.certificate_hash,
+            "status": cert.status,
+        }
+
+    @gl.public.view
+    def getCertificate(self, artwork_id: str) -> str:
+        """Return the on-chain Certificate of Authenticity for an artwork.
+
+        Empty string when no certificate has been minted (piece was never
+        verified ORIGINAL). A REVOKED status means a later dispute overturned
+        the ORIGINAL verdict.
+        """
+        if artwork_id not in self.certificates:
+            return ""
+        return json.dumps(self._certificate_dict(self.certificates[artwork_id]))
+
+    @gl.public.view
+    def getRegistry(self) -> str:
+        """Return every artwork as a compact registry row (newest first).
+
+        Powers the public provenance gallery without the frontend having to
+        probe ids one by one.
+        """
+        rows = []
+        max_id = int(self.next_artwork_id) - 1
+        for i in range(max_id, 0, -1):
+            aid = str(i)
+            if aid not in self.artworks:
+                continue
+            art = self.artworks[aid]
+            verdict_data = None
+            if art.verdict:
+                try:
+                    verdict_data = json.loads(art.verdict)
+                except Exception:
+                    verdict_data = None
+            cert_status = ""
+            cert_serial = 0
+            if aid in self.certificates:
+                cert = self.certificates[aid]
+                cert_status = cert.status
+                cert_serial = int(cert.serial)
+            rows.append({
+                "artwork_id": aid,
+                "submitter": _addr_str(art.submitter),
+                "artwork_url": art.artwork_url,
+                "status": art.status,
+                "verdict": verdict_data,
+                "certificate_status": cert_status,
+                "certificate_serial": cert_serial,
+            })
+        return json.dumps(rows)
+
+    @gl.public.view
+    def getRegistryStats(self) -> str:
+        """Aggregate counters for the provenance registry."""
+        max_id = int(self.next_artwork_id) - 1
+        total = 0
+        originals = 0
+        copies = 0
+        valid_certs = 0
+        revoked_certs = 0
+        for i in range(1, max_id + 1):
+            aid = str(i)
+            if aid not in self.artworks:
+                continue
+            total += 1
+            art = self.artworks[aid]
+            if art.verdict:
+                try:
+                    v = json.loads(art.verdict)
+                    if v.get("verdict") == "ORIGINAL":
+                        originals += 1
+                    elif v.get("verdict") == "COPY":
+                        copies += 1
+                except Exception:
+                    pass
+            if aid in self.certificates:
+                if self.certificates[aid].status == "VALID":
+                    valid_certs += 1
+                else:
+                    revoked_certs += 1
+        return json.dumps({
+            "total_artworks": total,
+            "originals": originals,
+            "copies": copies,
+            "certificates_issued": int(self.certificate_count),
+            "certificates_valid": valid_certs,
+            "certificates_revoked": revoked_certs,
+            "treasury_slashed": int(self.treasury_slashed),
+        })
 
     def _score_to_tier(self, score: int) -> str:
         if score >= 1500:

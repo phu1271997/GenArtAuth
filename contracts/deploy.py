@@ -53,7 +53,9 @@ def main():
     with open(contract_path, "r") as f:
         contract_code = f.read()
         
-    private_key = os.getenv("PRIVATE_KEY", "")
+    # Central keystore (~/.genlayer/keys.env) exports GENLAYER_PRIVATE_KEY;
+    # PRIVATE_KEY kept as a per-repo fallback.
+    private_key = os.getenv("GENLAYER_PRIVATE_KEY", "") or os.getenv("PRIVATE_KEY", "")
     rpc_url = os.getenv("GENLAYER_RPC_URL", "")
     
     try:

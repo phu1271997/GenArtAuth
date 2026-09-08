@@ -12,7 +12,11 @@ import {
   FileText, 
   History,
   ArrowRight,
-  X
+  X,
+  Cpu,
+  Award,
+  BadgeCheck,
+  Copy as CopyIcon
 } from "lucide-react";
 import Link from "next/link";
 import { useEffect, useState } from "react";
@@ -33,6 +37,7 @@ export default function Dashboard() {
   const [newEvidence, setNewEvidence] = useState("");
   const [isChallenging, setIsChallenging] = useState(false);
   const [isResolving, setIsResolving] = useState<string | null>(null);
+  const [isVerifying, setIsVerifying] = useState<string | null>(null);
 
   const fetchResults = async () => {
     setLoading(true);
@@ -77,6 +82,7 @@ export default function Dashboard() {
                 status: parsed.status,
                 verdict: parsed.verdict,
                 source_urls: parsed.source_urls,
+                certificate: parsed.certificate || null,
                 challenge: challenge
               });
             }
@@ -145,6 +151,39 @@ export default function Dashboard() {
       alert(`Dispute submission failed: ${extractContractError(error)}`);
     } finally {
       setIsChallenging(false);
+    }
+  };
+
+  const triggerVerify = async (artworkId: string) => {
+    if (!address) {
+      alert("Connect your wallet to run the AI verification.");
+      return;
+    }
+    setIsVerifying(artworkId);
+    try {
+      const { createClient } = await import("genlayer-js");
+      const walletProvider = (window as any).ethereum;
+      const chain = await getGenLayerChain(walletProvider);
+      const client = createClient({
+        chain,
+        account: address as `0x${string}`,
+        provider: getGenLayerProvider(walletProvider),
+      });
+
+      const txHash = await client.writeContract({
+        address: GENLAYER_CONTRACT_ADDRESS,
+        functionName: "verifyAuthenticity",
+        args: [artworkId],
+        value: BigInt(0),
+      });
+
+      alert(`AI verification consensus completed! The validators crawled the web, cross-referenced the on-chain registry, and reached a verdict. TxHash: ${txHash}`);
+      fetchResults();
+    } catch (error: unknown) {
+      console.error(error);
+      alert(`Verification failed: ${extractContractError(error)}`);
+    } finally {
+      setIsVerifying(null);
     }
   };
 
@@ -317,6 +356,25 @@ export default function Dashboard() {
 
                   <div className="flex flex-wrap gap-3 w-full lg:w-auto justify-end">
                     {/* Action buttons based on state */}
+                    {item.status === "PENDING" && (
+                      <button
+                        onClick={() => triggerVerify(item.id)}
+                        disabled={isVerifying === item.id}
+                        className="px-5 py-2.5 text-xs font-bold rounded-lg bg-primary hover:bg-primary/90 text-white transition-all flex items-center gap-1.5 shadow-[0_0_15px_rgba(139,92,246,0.3)] disabled:opacity-50"
+                      >
+                        {isVerifying === item.id ? (
+                          <>
+                            <span className="animate-spin rounded-full h-3.5 w-3.5 border-b-2 border-white"></span>
+                            Running AI Consensus...
+                          </>
+                        ) : (
+                          <>
+                            <Cpu className="w-3.5 h-3.5" /> Run AI Verification
+                          </>
+                        )}
+                      </button>
+                    )}
+
                     {item.status === "VERIFIED" && (
                       <button
                         onClick={() => setSelectedArtwork(item)}
@@ -391,7 +449,7 @@ export default function Dashboard() {
                       <div className="bg-white/5 p-6 rounded-2xl border border-white/5 text-center">
                         <Clock className="w-8 h-8 text-yellow-500 mx-auto mb-2 animate-bounce" />
                         <h5 className="font-bold text-white mb-1">Awaiting Verification</h5>
-                        <p className="text-xs text-gray-400">The verification request has been successfully submitted. Call verifyAuthenticity on GenLayer Studio or wait for the system to process the record.</p>
+                        <p className="text-xs text-gray-400">The submission is registered on-chain. Click <strong className="text-primary">Run AI Verification</strong> above to convene the GenLayer validators — they crawl the artwork + sources, query the Wayback Machine, cross-reference the on-chain registry of certified originals, and return a consensus verdict.</p>
                       </div>
                     )}
 
@@ -450,8 +508,51 @@ export default function Dashboard() {
                                 {item.verdict.reason}
                               </p>
                             </div>
+
+                            {/* Registry cross-reference match */}
+                            {item.verdict.matched_artwork_id && (
+                              <div className="flex items-center gap-2 bg-red-500/10 border border-red-500/25 rounded-lg p-3 text-xs text-red-300">
+                                <CopyIcon className="w-4 h-4 flex-shrink-0" />
+                                <span>
+                                  Registry cross-reference: this piece reproduces a certified original —{" "}
+                                  <Link href={`/certificate/${item.verdict.matched_artwork_id}`} className="font-bold underline hover:text-red-200">
+                                    Certificate #{item.verdict.matched_artwork_id}
+                                  </Link>
+                                </span>
+                              </div>
+                            )}
                           </div>
                         </div>
+
+                        {/* Certificate of Authenticity */}
+                        {item.certificate && (
+                          <div className={`flex items-center justify-between gap-3 p-4 rounded-2xl border ${
+                            item.certificate.status === "VALID"
+                              ? "bg-emerald-500/10 border-emerald-500/25"
+                              : "bg-gray-500/10 border-gray-500/25"
+                          }`}>
+                            <div className="flex items-center gap-3">
+                              {item.certificate.status === "VALID"
+                                ? <BadgeCheck className="w-6 h-6 text-emerald-400 flex-shrink-0" />
+                                : <ShieldAlert className="w-6 h-6 text-gray-400 flex-shrink-0" />}
+                              <div>
+                                <div className="text-xs font-bold text-white">
+                                  Certificate of Authenticity #{item.certificate.serial}
+                                  {item.certificate.status === "REVOKED" && <span className="ml-2 text-gray-400">(REVOKED)</span>}
+                                </div>
+                                <div className="text-[10px] font-mono text-gray-400 break-all">
+                                  {item.certificate.certificate_hash.slice(0, 24)}…
+                                </div>
+                              </div>
+                            </div>
+                            <Link
+                              href={`/certificate/${item.id}`}
+                              className="px-3 py-1.5 text-[11px] font-bold rounded-lg bg-white/10 hover:bg-white/20 text-white border border-white/10 transition-all flex items-center gap-1.5 flex-shrink-0"
+                            >
+                              <Award className="w-3.5 h-3.5" /> View
+                            </Link>
+                          </div>
+                        )}
 
                         {/* Provenance Trail / Challenge history if available */}
                         {hasChallenge && (

@@ -4,6 +4,30 @@ All notable changes to the **GenArtAuth** project are documented in this file.
 
 ---
 
+## [Milestone 7] - Provenance Registry & Certificate Layer
+
+### Added
+- **Registry-aware verification.** `verifyAuthenticity` now snapshots the on-chain corpus of already-certified originals via `_collect_registry` (deterministic read, bounded to the 5 most recent by `REGISTRY_CROSSREF_LIMIT`) and passes it into `_verify`. The non-deterministic block crawls each registered original and the LLM decides whether the new submission reproduces one of them, returning `matched_artwork_id`. The equivalence principle now also requires validators to agree on `matched_artwork_id`.
+- **On-chain Certificate of Authenticity.** New `Certificate` storage struct + `certificates: TreeMap[str, Certificate]` + monotonic `certificate_count`. A clean `ORIGINAL` verdict mints a certificate with a deterministic sha256 fingerprint (`_issue_certificate`); computed in deterministic code so every validator agrees.
+- **Certificate lifecycle on dispute.** `resolveChallenge` revokes the certificate when an overturn flips the verdict to `COPY` (`_revoke_certificate`), and (re)issues it when an overturn confirms `ORIGINAL`.
+- **New views:** `getCertificate(artwork_id)`, `getRegistry()` (whole registry newest-first), `getRegistryStats()` (aggregate counters). `getVerificationResult` now embeds the `certificate` object.
+- **`matched_artwork_id`** added to the verdict schema; `_clean_verdict` coerces any non-empty match to `COPY` / `BLOCK_MINT` so a registered duplicate can never be certified.
+- **Frontend — Registry gallery** (`/registry`): reads `getRegistry` + `getRegistryStats`, renders certificate/copy badges, filter tabs, and stat tiles.
+- **Frontend — Certificate of Authenticity page** (`/certificate/[id]`): shareable, verifiable public page with serial, fingerprint, provenance, confidence, jury rationale, VALID/REVOKED status, and copy-link.
+- **Frontend — in-app verification.** "Run AI Verification" on the dashboard wires `verifyAuthenticity` (previously the UI told users to call it on GenLayer Studio). Submit now routes to the dashboard so the full submit → verify → certify loop runs in-app.
+- **`scripts/seed_studionet.py`** to populate the live registry with real artworks (submit + verify) for reviewers.
+- **`docs/REGISTRY.md`** documenting the registry flow + certificate lifecycle.
+- **Five new tests** (19 total, all passing under `genlayer-test`): `test_certificate_minted_on_original`, `test_no_certificate_for_copy`, `test_registry_crossref_forces_copy`, `test_registry_views`, `test_certificate_revoked_on_overturn`.
+
+### Changed
+- `deploy.py` reads `GENLAYER_PRIVATE_KEY` (central keystore) with `PRIVATE_KEY` as fallback.
+- Navbar + home page gained a Registry link.
+
+### Redeploy required
+- Storage schema changed (new `certificates` TreeMap + `certificate_count`, and contract logic changed). Redeployed to Studionet at **`0x10A1d17C802436809c79bAD42e788f8a4C336522`**; `NEXT_PUBLIC_GENLAYER_CONTRACT_ADDRESS` updated on Vercel + `frontend/.env.local`.
+
+---
+
 ## [Milestone 6.2] - Trust Layer v1 Onboarding, Docs & CI Bundle
 
 ### Added

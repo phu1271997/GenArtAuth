@@ -16,15 +16,24 @@ GenArtAuth is an on-chain "AI Art Detective" dApp that verifies the authenticity
 - [`CONTRIBUTING.md`](./CONTRIBUTING.md) — dev workflow + ground rules for PRs.
 - [`CHANGELOG.md`](./CHANGELOG.md) — milestone history.
 
-- **Live Contract (GenLayer Studionet, Milestone 6 head):** `0x5e85C3319FA74948d753168a38d6b510C3E4FC9e`
-- Previous Milestone 5 head (pre-reputation, do not use): `0xC00FDc21EdCC4D07a0c8d585fDEE01B07Fb8FCA1`
+- **Live Contract (GenLayer Studionet, Milestone 7 head):** `0x10A1d17C802436809c79bAD42e788f8a4C336522`
+- Previous heads (older storage schema, do not use): Milestone 6 `0x5e85C3319FA74948d753168a38d6b510C3E4FC9e` · Milestone 5 `0xC00FDc21EdCC4D07a0c8d585fDEE01B07Fb8FCA1`
+- **Explorer:** https://genlayer-explorer.vercel.app/address/0x10A1d17C802436809c79bAD42e788f8a4C336522
 - **Entry class:** `Contract` (required by the GenLayer schema loader; see `contracts/gen_art_auth.py`)
 
 ---
 
 ## Key Features (Milestone-Grade)
 
-### 0. Trust Layer v1 (Milestone 6 + 6.1)
+### 0. Provenance Registry & Certificate Layer (Milestone 7 — latest)
+- **Registry-aware verification**: before running the AI, `verifyAuthenticity` snapshots the on-chain corpus of already-certified originals (`_collect_registry`, bounded to the 5 most recent) and feeds it into the nondet block. The validators crawl each registered original and decide whether the new submission is a re-mint/derivative of one of them, returning a `matched_artwork_id`. A match is coerced to `COPY` / `BLOCK_MINT`. **This is impossible in Solidity** — the contract reads its own registry and an LLM semantically compares live web content against it.
+- **On-chain Certificate of Authenticity**: a clean `ORIGINAL` verdict mints an immutable `Certificate` (monotonic serial + deterministic sha256 fingerprint) into `certificates: TreeMap[str, Certificate]`. A dispute that later overturns the verdict flips the certificate to `REVOKED` automatically; a dispute that re-confirms `ORIGINAL` refreshes it.
+- **New views**: `getCertificate(artwork_id)`, `getRegistry()` (whole registry, newest first), `getRegistryStats()` (aggregate counters). `getVerificationResult` now embeds the certificate.
+- **New frontend surfaces**: public **Registry gallery** (`/registry`) with certificate/copy badges + stats, and a **shareable Certificate of Authenticity page** (`/certificate/[id]`) verifiable by anyone against the on-chain record.
+- **End-to-end in-app verification**: `verifyAuthenticity` is now wired into the dApp ("Run AI Verification" on the dashboard) — the entire submit → verify → certify → dispute loop runs from the UI, no GenLayer Studio round-trip.
+- **Tests**: 19 total (5 new) under `genlayer-test`, covering certificate minting, no-cert-for-copy, registry cross-reference coercion, registry views, and certificate revocation on overturn.
+
+### 0.1 Trust Layer v1 (Milestone 6 + 6.1)
 - **On-chain reputation system**: ELO-style score (starts at 1000, floor 0) per address, plus monotonic counters for submissions, verified stands, verdicts overturned, and challenge wins/losses. Exposed via `getReputation(address_str)` and rendered as tier badges in the UI.
 - **Multi-perspective AI verification**: initial `_verify` now demands an explicit Forensic + Provenance + Skeptic synthesis (previously only the challenge jury did). The equivalence principle validates that both validator outputs cover all three perspectives.
 - **Prompt-injection canary defense**: crawled web content is wrapped in `<<<UNTRUSTED_BEGIN>>> … <<<UNTRUSTED_END>>>` delimiters and every prompt embeds a do-not-echo sentinel. Verdicts that echo the sentinel are rejected before storage is written.
@@ -59,17 +68,20 @@ GenArtAuth is an on-chain "AI Art Detective" dApp that verifies the authenticity
 ```text
 GenArtAuth/
 ├── contracts/               # GenLayer Intelligent Contracts
-│   ├── gen_art_auth.py      # Core AI contract (Semantic Consensus, AI Jury, Stakes, Reputation)
+│   ├── gen_art_auth.py      # Core AI contract (Consensus, AI Jury, Stakes, Reputation, Registry, Certificates)
 │   └── deploy.py            # Deployment orchestrator & frontend sync script
+├── scripts/                 # Operational scripts
+│   └── seed_studionet.py    # Seed the live registry with real artworks (submit + verify)
 ├── tests/                   # Automated Testing Suite
-│   └── test_gen_art_auth.py # 14 tests: happy paths, edge cases, disputes, reputation, injection
-├── docs/                    # Extended documentation (Milestone 6)
+│   └── test_gen_art_auth.py # 19 tests: happy paths, edge cases, disputes, reputation, injection, registry, certificates
+├── docs/                    # Extended documentation
 │   ├── ARCHITECTURE.md      # Mermaid diagrams + storage layout + lifecycles
+│   ├── REGISTRY.md          # Milestone 7: registry-aware verification + certificate lifecycle
 │   ├── SECURITY.md          # Threat model + mitigations
 │   └── ECONOMICS.md         # GEN flows + reputation deltas + tier bands
 ├── frontend/                # Next.js 15 Web App
 │   ├── src/
-│   │   ├── app/             # App Router pages (Home, Submit, Dashboard, My Verifications)
+│   │   ├── app/             # App Router pages (Home, Submit, Dashboard, Registry, Certificate, Leaderboard, My Verifications)
 │   │   ├── components/      # UI components (Navbar, ReputationBadge, Modals)
 │   │   ├── config/          # Contract address + gas-floor provider + explorer helpers
 │   │   └── lib/             # Web3 Providers & wagmi configurations
@@ -113,9 +125,9 @@ GenArtAuth includes a comprehensive unit testing suite built with the `genlayer-
 
 ### Option B: Programmatic Deployment (Studionet)
 If you have a Studionet-funded private key configured in your environment:
-1. Setup your `.env` file:
+1. Provide a Studionet-funded key via `GENLAYER_PRIVATE_KEY` (or `PRIVATE_KEY`):
    ```env
-   PRIVATE_KEY="your_studionet_private_key_here"
+   GENLAYER_PRIVATE_KEY="your_studionet_private_key_here"
    # Optional: override the default Studionet RPC.
    GENLAYER_RPC_URL="https://studio.genlayer.com/api"
    ```
@@ -124,6 +136,10 @@ If you have a Studionet-funded private key configured in your environment:
    python3 contracts/deploy.py
    ```
    *The script deploys to Studionet, waits for the receipt, and auto-configures the frontend environment. Fund the deployer wallet from the Studio **Accounts** panel — the public testnet faucet funds a different network and will not work here.*
+3. (Optional) Seed the live registry so `/registry` and `/certificate/[id]` are populated for reviewers:
+   ```bash
+   python3 scripts/seed_studionet.py 0x<contract_address>
+   ```
 
 ---
 
