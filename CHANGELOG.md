@@ -4,6 +4,24 @@ All notable changes to the **GenArtAuth** project are documented in this file.
 
 ---
 
+## [Milestone 8] - Licensing & Royalty Layer with AI Compliance Adjudication
+
+### Added
+- **On-chain licensing of certified originals.** New `createLicense(artwork_id, terms, price, bond)` — only the holder of a VALID Certificate of Authenticity can issue a license, with human-readable `terms` the AI later adjudicates against.
+- **Royalty purchase.** `purchaseLicense(license_id, usage_url)` (payable) pays `price` straight through to the rights holder as a royalty and locks the licensee's compliance `bond`; records a `LicenseGrant` tied to the concrete `usage_url` where the work will be used. `royalties_paid` counter tracks cumulative GEN routed to rights holders.
+- **AI license-compliance adjudication.** `reviewLicenseCompliance(grant_id, evidence_urls)` (payable stake) runs `_adjudicate_license`: validators crawl the licensee's real usage page + the licensed artwork and judge the usage against the written terms, returning `{verdict: COMPLIANT|VIOLATION, severity, reason}` under `eq_principle.prompt_comparative`. This is a subjective judgment over live web content — GenLayer's core use case.
+- **Fully-collateralised payouts.** VIOLATION → rights holder recovers stake + is awarded the licensee's bond, grant marked VIOLATION. COMPLIANT → licensee's bond refunded, rights holder's stake slashed into the treasury. The contract always holds bond + stake before paying, so it can never owe more than it received.
+- **New structs/storage:** `License`, `LicenseGrant`, `licenses`/`grants`/`artwork_licenses` TreeMaps, `next_license_id`, `next_grant_id`, `min_license_dispute_stake`, `royalties_paid`.
+- **New views:** `getLicense`, `getArtworkLicenses`, `getLicenseMarketplace`, `getGrant`, `getGrantsForLicense`, `getLicenseStats`.
+- **Frontend `/licenses`** — issue a license on your certified originals, browse the marketplace, purchase (pay royalty + lock bond, declaring your usage URL), and (as a rights holder) open an AI compliance review of any active usage. Navbar + home link added.
+- **Six new tests** (25 total, all passing): create/purchase, requires-valid-certificate, rights-holder-only, compliance VIOLATION, compliance COMPLIANT (treasury slash), insufficient-payment.
+- **`docs/REGISTRY.md`** extended with the licensing flow + solvency invariant.
+
+### Redeploy required
+- Storage schema changed. Redeployed to Studionet at **`0x2f3B89e545941c7e4c81d1F8F1A4450dA75779b9`**; `NEXT_PUBLIC_GENLAYER_CONTRACT_ADDRESS` updated on Vercel + `frontend/.env.local`.
+
+---
+
 ## [Milestone 7] - Provenance Registry & Certificate Layer
 
 ### Added

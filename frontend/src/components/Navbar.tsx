@@ -33,6 +33,9 @@ export function Navbar() {
           <Link href="/registry" className="text-sm font-medium text-gray-300 hover:text-white transition-colors">
             Registry
           </Link>
+          <Link href="/licenses" className="text-sm font-medium text-gray-300 hover:text-white transition-colors">
+            Licenses
+          </Link>
           <Link href="/leaderboard" className="text-sm font-medium text-gray-300 hover:text-white transition-colors">
             Leaderboard
           </Link>

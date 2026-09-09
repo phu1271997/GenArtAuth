@@ -632,3 +632,150 @@ def test_certificate_revoked_on_overturn(direct_vm, direct_deploy, direct_alice,
     stats = json.loads(contract.getRegistryStats())
     assert stats["certificates_revoked"] == 1
     assert stats["certificates_valid"] == 0
+
+
+# ---------------------------------------------------------------------------
+# Milestone 8 — Licensing & Royalty layer
+# ---------------------------------------------------------------------------
+
+LICENSE_PRICE = 20 * 10**18   # 20 GEN
+LICENSE_BOND = 8 * 10**18     # 8 GEN compliance bond
+LICENSE_DISPUTE_STAKE = 5 * 10**18
+
+
+def _certify_original(contract, direct_vm, url, sources):
+    direct_vm.mock_web(r".*", {"status": 200, "body": "web content"})
+    direct_vm.mock_llm(
+        r".*FORENSIC PERSPECTIVE.*",
+        {
+            "verdict": "ORIGINAL", "action": "MINT_SAFE", "confidence": 95,
+            "earliest_source": sources[0], "matched_artwork_id": "",
+            "reason": "Forensic ok. Provenance ok. Skeptic ok. Registry: novel.",
+        },
+    )
+    aid = _submit(contract, direct_vm, url, sources)
+    contract.verifyAuthenticity(aid)
+    return aid
+
+
+def test_create_and_purchase_license(direct_vm, direct_deploy, direct_alice, direct_bob):
+    contract = direct_deploy("contracts/gen_art_auth.py")
+    direct_vm.sender = direct_alice
+    aid = _certify_original(contract, direct_vm, "https://opensea.io/assets/lic-1", ["https://twitter.com/a"])
+
+    # Alice (rights holder) issues a license.
+    lid = contract.createLicense(aid, "Non-commercial use only, attribution required.", LICENSE_PRICE, LICENSE_BOND)
+    assert lid == "1"
+    lic = json.loads(contract.getLicense(lid))
+    assert lic["price"] == LICENSE_PRICE and lic["bond"] == LICENSE_BOND and lic["active"] is True
+
+    # Bob purchases it, paying price + bond and declaring a usage URL.
+    direct_vm.sender = direct_bob
+    direct_vm.value = LICENSE_PRICE + LICENSE_BOND
+    try:
+        gid = contract.purchaseLicense(lid, "https://bobs-blog.example/post")
+    finally:
+        direct_vm.value = 0
+    assert gid == "1"
+
+    grant = json.loads(contract.getGrant(gid))
+    assert grant["licensee"] == _addr_key(direct_bob)
+    assert grant["status"] == "ACTIVE"
+    assert grant["bond_locked"] == LICENSE_BOND
+
+    stats = json.loads(contract.getLicenseStats())
+    assert stats["total_licenses"] == 1
+    assert stats["total_grants"] == 1
+    assert stats["royalties_paid"] == LICENSE_PRICE
+
+
+def test_license_requires_valid_certificate(direct_vm, direct_deploy, direct_alice):
+    contract = direct_deploy("contracts/gen_art_auth.py")
+    direct_vm.sender = direct_alice
+    # Submit but do NOT verify → no certificate.
+    aid = _submit(contract, direct_vm, "https://opensea.io/assets/nocert", ["https://twitter.com/a"])
+    with pytest.raises(Exception) as excinfo:
+        contract.createLicense(aid, "terms", LICENSE_PRICE, LICENSE_BOND)
+    assert "Certificate" in str(excinfo.value)
+
+
+def test_only_rights_holder_can_license(direct_vm, direct_deploy, direct_alice, direct_bob):
+    contract = direct_deploy("contracts/gen_art_auth.py")
+    direct_vm.sender = direct_alice
+    aid = _certify_original(contract, direct_vm, "https://opensea.io/assets/rh", ["https://twitter.com/a"])
+    direct_vm.sender = direct_bob
+    with pytest.raises(Exception) as excinfo:
+        contract.createLicense(aid, "terms", LICENSE_PRICE, LICENSE_BOND)
+    assert "rights holder" in str(excinfo.value)
+
+
+def test_license_compliance_violation(direct_vm, direct_deploy, direct_alice, direct_bob):
+    contract = direct_deploy("contracts/gen_art_auth.py")
+    direct_vm.sender = direct_alice
+    aid = _certify_original(contract, direct_vm, "https://opensea.io/assets/v", ["https://twitter.com/a"])
+    lid = contract.createLicense(aid, "Non-commercial only.", LICENSE_PRICE, LICENSE_BOND)
+
+    direct_vm.sender = direct_bob
+    direct_vm.value = LICENSE_PRICE + LICENSE_BOND
+    gid = contract.purchaseLicense(lid, "https://shop.example/selling-prints")
+    direct_vm.value = 0
+
+    # AI rules the usage a VIOLATION.
+    direct_vm.mock_llm(
+        r".*License Compliance Adjudicator.*",
+        {"verdict": "VIOLATION", "severity": 80, "reason": "Commercial resale breaches the non-commercial term."},
+    )
+    direct_vm.sender = direct_alice
+    direct_vm.value = LICENSE_DISPUTE_STAKE
+    contract.reviewLicenseCompliance(gid, ["https://shop.example/proof"])
+    direct_vm.value = 0
+
+    grant = json.loads(contract.getGrant(gid))
+    assert grant["status"] == "VIOLATION"
+    assert grant["verdict"]["verdict"] == "VIOLATION"
+    assert grant["bond_locked"] == 0
+
+
+def test_license_compliance_compliant(direct_vm, direct_deploy, direct_alice, direct_bob):
+    contract = direct_deploy("contracts/gen_art_auth.py")
+    direct_vm.sender = direct_alice
+    aid = _certify_original(contract, direct_vm, "https://opensea.io/assets/c", ["https://twitter.com/a"])
+    lid = contract.createLicense(aid, "Non-commercial, attribution required.", LICENSE_PRICE, LICENSE_BOND)
+
+    direct_vm.sender = direct_bob
+    direct_vm.value = LICENSE_PRICE + LICENSE_BOND
+    gid = contract.purchaseLicense(lid, "https://bobs-blog.example/credited-post")
+    direct_vm.value = 0
+
+    direct_vm.mock_llm(
+        r".*License Compliance Adjudicator.*",
+        {"verdict": "COMPLIANT", "severity": 0, "reason": "Non-commercial blog post with correct attribution."},
+    )
+    direct_vm.sender = direct_alice
+    direct_vm.value = LICENSE_DISPUTE_STAKE
+    contract.reviewLicenseCompliance(gid, ["https://bobs-blog.example/credited-post"])
+    direct_vm.value = 0
+
+    grant = json.loads(contract.getGrant(gid))
+    assert grant["status"] == "COMPLIANT"
+    assert grant["verdict"]["verdict"] == "COMPLIANT"
+
+    # Rights holder's stake was slashed into the treasury.
+    treasury = json.loads(contract.getTreasuryBalance())
+    assert treasury["treasury_slashed"] == LICENSE_DISPUTE_STAKE
+
+
+def test_license_insufficient_payment(direct_vm, direct_deploy, direct_alice, direct_bob):
+    contract = direct_deploy("contracts/gen_art_auth.py")
+    direct_vm.sender = direct_alice
+    aid = _certify_original(contract, direct_vm, "https://opensea.io/assets/pay", ["https://twitter.com/a"])
+    lid = contract.createLicense(aid, "terms", LICENSE_PRICE, LICENSE_BOND)
+
+    direct_vm.sender = direct_bob
+    direct_vm.value = LICENSE_PRICE  # missing the bond
+    try:
+        with pytest.raises(Exception) as excinfo:
+            contract.purchaseLicense(lid, "https://use.example")
+    finally:
+        direct_vm.value = 0
+    assert "Insufficient payment" in str(excinfo.value)
