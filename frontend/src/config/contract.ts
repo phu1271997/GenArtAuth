@@ -10,15 +10,18 @@ const MIN_GAS_PRICE_BIGINT = BigInt(MIN_GAS_PRICE_HEX);
 const MIN_PRIORITY_FEE_HEX = "0x77359400"; // 2 gwei
 const MIN_PRIORITY_FEE_BIGINT = BigInt(MIN_PRIORITY_FEE_HEX);
 
-// Milestone 7 (Provenance Registry & Certificate Layer) contract head on
-// Studionet. Adds registry-aware verification, on-chain Certificates of
-// Authenticity, and the getRegistry/getCertificate/getRegistryStats views.
+// Milestone 8 (Licensing & Royalty Layer) contract head on Studionet.
+// Adds licenses on certified originals, GEN royalty purchase, and AI
+// license-compliance adjudication (createLicense / purchaseLicense /
+// reviewLicenseCompliance + getLicense* views) on top of the Milestone 7
+// registry & certificate layer.
 // Previous heads (do NOT point the frontend at them — older storage schema):
-//   Milestone 6 (Trust Layer): 0x5e85C3319FA74948d753168a38d6b510C3E4FC9e
-//   Milestone 5:               0xC00FDc21EdCC4D07a0c8d585fDEE01B07Fb8FCA1
+//   Milestone 7 (Registry/Certificate): 0x10A1d17C802436809c79bAD42e788f8a4C336522
+//   Milestone 6 (Trust Layer):          0x5e85C3319FA74948d753168a38d6b510C3E4FC9e
+//   Milestone 5:                        0xC00FDc21EdCC4D07a0c8d585fDEE01B07Fb8FCA1
 export const GENLAYER_CONTRACT_ADDRESS = (
   process.env.NEXT_PUBLIC_GENLAYER_CONTRACT_ADDRESS ||
-  "0x10A1d17C802436809c79bAD42e788f8a4C336522"
+  "0x2f3B89e545941c7e4c81d1F8F1A4450dA75779b9"
 ) as `0x${string}`;
 
 const toHex = (value: bigint) => `0x${value.toString(16)}`;

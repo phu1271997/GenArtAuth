@@ -2,7 +2,7 @@
 
 import { motion } from "framer-motion";
 import Link from "next/link";
-import { ArrowRight, Shield, Fingerprint, Cpu, Trophy, Award } from "lucide-react";
+import { ArrowRight, Shield, Fingerprint, Cpu, Trophy, Award, Scale } from "lucide-react";
 
 export default function Home() {
   return (
@@ -46,6 +46,11 @@ export default function Home() {
           <Link href="/registry">
             <button className="flex items-center gap-2 px-8 py-4 rounded-full bg-white/5 text-white font-semibold hover:bg-white/10 transition-all border border-white/10 hover:-translate-y-1">
               <Award className="w-4 h-4" /> Registry
+            </button>
+          </Link>
+          <Link href="/licenses">
+            <button className="flex items-center gap-2 px-8 py-4 rounded-full bg-white/5 text-white font-semibold hover:bg-white/10 transition-all border border-white/10 hover:-translate-y-1">
+              <Scale className="w-4 h-4" /> Licenses
             </button>
           </Link>
           <Link href="/leaderboard">

@@ -16,16 +16,23 @@ GenArtAuth is an on-chain "AI Art Detective" dApp that verifies the authenticity
 - [`CONTRIBUTING.md`](./CONTRIBUTING.md) — dev workflow + ground rules for PRs.
 - [`CHANGELOG.md`](./CHANGELOG.md) — milestone history.
 
-- **Live Contract (GenLayer Studionet, Milestone 7 head):** `0x10A1d17C802436809c79bAD42e788f8a4C336522`
-- Previous heads (older storage schema, do not use): Milestone 6 `0x5e85C3319FA74948d753168a38d6b510C3E4FC9e` · Milestone 5 `0xC00FDc21EdCC4D07a0c8d585fDEE01B07Fb8FCA1`
-- **Explorer:** https://genlayer-explorer.vercel.app/address/0x10A1d17C802436809c79bAD42e788f8a4C336522
+- **Live Contract (GenLayer Studionet, Milestone 8 head):** `0x2f3B89e545941c7e4c81d1F8F1A4450dA75779b9`
+- Previous heads (older storage schema, do not use): M7 `0x10A1d17C802436809c79bAD42e788f8a4C336522` · M6 `0x5e85C3319FA74948d753168a38d6b510C3E4FC9e` · M5 `0xC00FDc21EdCC4D07a0c8d585fDEE01B07Fb8FCA1`
+- **Explorer:** https://genlayer-explorer.vercel.app/address/0x2f3B89e545941c7e4c81d1F8F1A4450dA75779b9
 - **Entry class:** `Contract` (required by the GenLayer schema loader; see `contracts/gen_art_auth.py`)
 
 ---
 
 ## Key Features (Milestone-Grade)
 
-### 0. Provenance Registry & Certificate Layer (Milestone 7 — latest)
+### 0. Licensing & Royalty Layer with AI Compliance Adjudication (Milestone 8 — latest)
+- **License a certified original**: `createLicense` lets the holder of a VALID Certificate of Authenticity offer a license for GEN, with written `terms` the AI adjudicates against.
+- **Royalty purchase**: `purchaseLicense` pays the price straight to the rights holder as a royalty and locks a licensee compliance bond, recording the concrete `usage_url` where the work will be used.
+- **AI compliance adjudication**: `reviewLicenseCompliance` has GenLayer validators crawl the licensee's real usage page and judge it against the license terms, returning `COMPLIANT` or `VIOLATION` with severity + reason. **Solidity cannot read a live page and decide whether a real-world use honours written terms** — this subjective judgment is the product.
+- **Fully-collateralised**: VIOLATION awards the rights holder the licensee's bond (+ stake back); COMPLIANT refunds the bond and slashes the rights holder's stake to the treasury. The contract never owes more than it holds.
+- **Frontend `/licenses`**: issue, browse marketplace, purchase, and run AI compliance reviews in-app.
+
+### 0.1 Provenance Registry & Certificate Layer (Milestone 7)
 - **Registry-aware verification**: before running the AI, `verifyAuthenticity` snapshots the on-chain corpus of already-certified originals (`_collect_registry`, bounded to the 5 most recent) and feeds it into the nondet block. The validators crawl each registered original and decide whether the new submission is a re-mint/derivative of one of them, returning a `matched_artwork_id`. A match is coerced to `COPY` / `BLOCK_MINT`. **This is impossible in Solidity** — the contract reads its own registry and an LLM semantically compares live web content against it.
 - **On-chain Certificate of Authenticity**: a clean `ORIGINAL` verdict mints an immutable `Certificate` (monotonic serial + deterministic sha256 fingerprint) into `certificates: TreeMap[str, Certificate]`. A dispute that later overturns the verdict flips the certificate to `REVOKED` automatically; a dispute that re-confirms `ORIGINAL` refreshes it.
 - **New views**: `getCertificate(artwork_id)`, `getRegistry()` (whole registry, newest first), `getRegistryStats()` (aggregate counters). `getVerificationResult` now embeds the certificate.

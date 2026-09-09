@@ -97,3 +97,58 @@ certificate_count: u256                    # monotonic serial
   on-chain record via the Explorer link.
 - **Dashboard** — "Run AI Verification" wires `verifyAuthenticity` into the app, and each
   card surfaces its certificate + any registry cross-reference match.
+
+---
+
+# Licensing & Royalty Layer (Milestone 8)
+
+Milestone 8 adds an economic + adjudication layer on top of certified originals:
+rights holders **license** their certified work for GEN, and GenLayer AI **judges
+whether a licensee's real usage complies with the written license terms**.
+
+## Why this needs GenLayer
+
+"Did this real-world usage honour these license terms?" is a subjective judgment
+over live, unstructured web content — exactly GenLayer's purpose. The validators
+crawl the licensee's actual usage page and reason about it against the terms
+(commercial vs non-commercial, attribution, modifications, platform limits). A
+normal contract can hold a license record; it cannot read a web page and decide
+whether the use complies.
+
+## Flow
+
+```
+createLicense(artwork_id, terms, price, bond)   # rights holder of a VALID certificate only
+        |
+purchaseLicense(license_id, usage_url)  [payable price + bond]
+        |   price -> rights holder (royalty), bond held by contract
+        v
+reviewLicenseCompliance(grant_id, evidence)  [payable stake]   # rights holder opens AI review
+        |   _adjudicate_license: crawl usage_url + artwork, judge vs terms
+        |   eq_principle.prompt_comparative on {verdict, severity}
+        |-- VIOLATION -> rights holder recovers stake + is awarded the licensee bond; grant REVOKED
+        \-- COMPLIANT -> licensee bond refunded; rights holder stake slashed to treasury
+```
+
+Every branch is fully collateralised: the contract holds `bond` (from purchase)
+and `stake` (from the review) before any payout, so it can never owe more than it
+holds — the same solvency invariant used by the dispute flow.
+
+## Storage added
+
+```
+License:      license_id, artwork_id, rights_holder, terms, price, bond, active
+LicenseGrant: grant_id, license_id, artwork_id, licensee, usage_url, bond_locked, status, verdict
+licenses / grants / artwork_licenses TreeMaps + next_license_id / next_grant_id / royalties_paid
+```
+
+## Views
+
+`getLicense`, `getArtworkLicenses`, `getLicenseMarketplace`, `getGrant`,
+`getGrantsForLicense`, `getLicenseStats`.
+
+## Frontend
+
+`/licenses` — issue a license on your certified originals, browse the marketplace,
+purchase a license (pay royalty + lock a compliance bond), and (as a rights
+holder) open an AI compliance review of any active usage.
