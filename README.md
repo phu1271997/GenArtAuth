@@ -16,6 +16,7 @@ GenArtAuth is an on-chain "AI Art Detective" dApp that verifies the authenticity
 - [`CONTRIBUTING.md`](./CONTRIBUTING.md) — dev workflow + ground rules for PRs.
 - [`CHANGELOG.md`](./CHANGELOG.md) — milestone history.
 
+- **Live App:** https://genartauth.vercel.app
 - **Live Contract (GenLayer Studionet, Milestone 8 head):** `0x13E978645663b36Fd56dDf23d457044E404BdCBc`
 - Previous heads (older storage schema, do not use): M8-prev `0x2f3B89e545941c7e4c81d1F8F1A4450dA75779b9` · M7 `0x10A1d17C802436809c79bAD42e788f8a4C336522` · M6 `0x5e85C3319FA74948d753168a38d6b510C3E4FC9e` · M5 `0xC00FDc21EdCC4D07a0c8d585fDEE01B07Fb8FCA1`
 - **Explorer:** https://genlayer-explorer.vercel.app/address/0x13E978645663b36Fd56dDf23d457044E404BdCBc
