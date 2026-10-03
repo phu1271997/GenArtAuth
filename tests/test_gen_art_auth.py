@@ -779,3 +779,130 @@ def test_license_insufficient_payment(direct_vm, direct_deploy, direct_alice, di
     finally:
         direct_vm.value = 0
     assert "Insufficient payment" in str(excinfo.value)
+
+
+# ---------------------------------------------------------------------------
+# Milestone 8 — judge-feedback regressions
+# ---------------------------------------------------------------------------
+
+def test_purchase_rejected_after_certificate_revoked(direct_vm, direct_deploy, direct_alice, direct_bob):
+    """Certificate validity is re-checked AT PURCHASE: a license listed while the
+    certificate was VALID must not be purchasable once a challenge revokes it."""
+    contract = direct_deploy("contracts/gen_art_auth.py")
+    direct_vm.sender = direct_alice
+    aid = _certify_original(contract, direct_vm, "https://opensea.io/assets/revoke", ["https://twitter.com/a"])
+    lid = contract.createLicense(aid, "Non-commercial only.", LICENSE_PRICE, LICENSE_BOND)
+
+    # A challenge overturns the ORIGINAL verdict → certificate REVOKED.
+    direct_vm.sender = direct_bob
+    direct_vm.value = CHALLENGE_STAKE
+    contract.challengeVerdict(aid, ["https://deviantart.com/true-original"])
+    direct_vm.value = 0
+    direct_vm.mock_llm(
+        r".*Supreme AI Jury of GenArtAuth.*",
+        {
+            "verdict": "COPY", "action": "BLOCK_MINT", "confidence": 96,
+            "earliest_source": "https://deviantart.com/true-original", "matched_artwork_id": "",
+            "reason": "Jury overturns: challenger evidence predates the target.",
+        },
+    )
+    contract.resolveChallenge(aid)
+    assert json.loads(contract.getCertificate(aid))["status"] == "REVOKED"
+
+    # The still-listed license can no longer be bought.
+    direct_vm.sender = direct_bob
+    direct_vm.value = LICENSE_PRICE + LICENSE_BOND
+    try:
+        with pytest.raises(Exception) as excinfo:
+            contract.purchaseLicense(lid, "https://use.example")
+    finally:
+        direct_vm.value = 0
+    assert "no longer VALID" in str(excinfo.value)
+
+
+def test_purchase_overpayment_refunded(direct_vm, direct_deploy, direct_alice, direct_bob):
+    """Overpaying price + bond must not inflate the royalty or lock extra; the
+    excess is refunded, only the bond is held."""
+    contract = direct_deploy("contracts/gen_art_auth.py")
+    direct_vm.sender = direct_alice
+    aid = _certify_original(contract, direct_vm, "https://opensea.io/assets/over", ["https://twitter.com/a"])
+    lid = contract.createLicense(aid, "Non-commercial only.", LICENSE_PRICE, LICENSE_BOND)
+
+    overpay = 7 * 10**18
+    direct_vm.sender = direct_bob
+    direct_vm.value = LICENSE_PRICE + LICENSE_BOND + overpay
+    try:
+        gid = contract.purchaseLicense(lid, "https://bobs-blog.example/post")
+    finally:
+        direct_vm.value = 0
+
+    grant = json.loads(contract.getGrant(gid))
+    assert grant["status"] == "ACTIVE"
+    assert grant["bond_locked"] == LICENSE_BOND  # excess not locked as collateral
+
+    stats = json.loads(contract.getLicenseStats())
+    assert stats["royalties_paid"] == LICENSE_PRICE  # excess not counted as royalty
+
+
+def test_malformed_compliance_verdict_rejected(direct_vm, direct_deploy, direct_alice, direct_bob):
+    """A non-conforming AI verdict is marked INVALID and settles nothing: the
+    grant reopens, the bond stays locked, and neither side is paid."""
+    contract = direct_deploy("contracts/gen_art_auth.py")
+    direct_vm.sender = direct_alice
+    aid = _certify_original(contract, direct_vm, "https://opensea.io/assets/bad", ["https://twitter.com/a"])
+    lid = contract.createLicense(aid, "Non-commercial only.", LICENSE_PRICE, LICENSE_BOND)
+
+    direct_vm.sender = direct_bob
+    direct_vm.value = LICENSE_PRICE + LICENSE_BOND
+    gid = contract.purchaseLicense(lid, "https://use.example/post")
+    direct_vm.value = 0
+
+    # AI returns a verdict outside {COMPLIANT, VIOLATION} → cleaned to INVALID.
+    direct_vm.mock_llm(
+        r".*License Compliance Adjudicator.*",
+        {"verdict": "MAYBE", "severity": 50, "reason": "Unclear."},
+    )
+    direct_vm.sender = direct_alice
+    direct_vm.value = LICENSE_DISPUTE_STAKE
+    contract.reviewLicenseCompliance(gid, ["https://use.example/proof"])
+    direct_vm.value = 0
+
+    grant = json.loads(contract.getGrant(gid))
+    assert grant["status"] == "ACTIVE"            # reopened, not marked VIOLATION
+    assert grant["verdict"]["verdict"] == "INVALID"
+    assert grant["bond_locked"] == LICENSE_BOND   # bond untouched
+
+    # Nothing was slashed into the treasury on a malformed verdict.
+    assert json.loads(contract.getTreasuryBalance())["treasury_slashed"] == 0
+
+
+def test_unreviewed_grant_bond_reclaim(direct_vm, direct_deploy, direct_alice, direct_bob):
+    """When the rights holder never opens a review, the licensee has a bounded
+    path to reclaim the locked compliance bond — licensee-only and once."""
+    contract = direct_deploy("contracts/gen_art_auth.py")
+    direct_vm.sender = direct_alice
+    aid = _certify_original(contract, direct_vm, "https://opensea.io/assets/reclaim", ["https://twitter.com/a"])
+    lid = contract.createLicense(aid, "Non-commercial only.", LICENSE_PRICE, LICENSE_BOND)
+
+    direct_vm.sender = direct_bob
+    direct_vm.value = LICENSE_PRICE + LICENSE_BOND
+    gid = contract.purchaseLicense(lid, "https://use.example/post")
+    direct_vm.value = 0
+
+    # Only the licensee may reclaim — the rights holder cannot.
+    direct_vm.sender = direct_alice
+    with pytest.raises(Exception) as excinfo:
+        contract.reclaimComplianceBond(gid)
+    assert "licensee" in str(excinfo.value)
+
+    # Licensee reclaims (no on-chain clock in direct mode → window waived).
+    direct_vm.sender = direct_bob
+    contract.reclaimComplianceBond(gid)
+    grant = json.loads(contract.getGrant(gid))
+    assert grant["status"] == "REFUNDED"
+    assert grant["bond_locked"] == 0
+
+    # Cannot reclaim a second time.
+    with pytest.raises(Exception) as excinfo:
+        contract.reclaimComplianceBond(gid)
+    assert "not reclaimable" in str(excinfo.value)

@@ -36,6 +36,18 @@ def _addr_str(addr: Address) -> str:
     return raw.strip().lower()
 
 
+def _now_epoch() -> int:
+    """Current on-chain wall-clock in unix seconds, or 0 when unavailable.
+
+    Older GenVM / gltest-direct builds expose no clock; callers treat a 0
+    return as "time gate not enforceable on this build" (advisory only).
+    """
+    try:
+        return int(gl.vm.get_timestamp().timestamp())
+    except Exception:
+        return 0
+
+
 @allow_storage
 @dataclass
 class Artwork:
@@ -103,8 +115,9 @@ class LicenseGrant:
     licensee: Address
     usage_url: str
     bond_locked: u256
-    status: str         # "ACTIVE", "REVIEWING", "COMPLIANT", "VIOLATION"
+    status: str         # "ACTIVE", "REVIEWING", "COMPLIANT", "VIOLATION", "REFUNDED"
     verdict: str        # JSON-encoded AI compliance verdict
+    purchased_at: u256  # unix seconds at purchase (0 if clock unavailable)
 
 
 @allow_storage
@@ -140,6 +153,11 @@ class Contract(gl.Contract):
     # Max registered originals fed into a single verification as the
     # cross-reference corpus. Bounds per-verification crawl cost.
     REGISTRY_CROSSREF_LIMIT = 5
+
+    # How long a licensee's compliance bond stays locked before they may
+    # reclaim it when the rights holder never opens a review (30 days). Only
+    # enforced on builds that expose an on-chain clock (see _now_epoch).
+    BOND_RECLAIM_WINDOW_SECS = 30 * 24 * 60 * 60
 
     def __init__(self):
         self.next_artwork_id = "1"
@@ -739,12 +757,16 @@ Return ONLY a JSON object with EXACTLY this schema, and nothing else:
     # ------------------------------------------------------------------
     def _clean_compliance(self, parsed: dict) -> dict:
         verdict = str(parsed.get("verdict", "")).upper()
-        severity = int(parsed.get("severity", 0))
+        try:
+            severity = int(parsed.get("severity", 0))
+        except Exception:
+            severity = 0
         reason = str(parsed.get("reason", ""))
         if verdict not in ["COMPLIANT", "VIOLATION"]:
-            # Fail safe: an unparseable verdict is treated as a violation so the
-            # rights holder is never silently denied protection.
-            verdict = "VIOLATION"
+            # A non-conforming verdict is marked INVALID — never silently coerced
+            # to VIOLATION. The caller rejects it and settles nothing, so neither
+            # party is paid on a malformed adjudication.
+            verdict = "INVALID"
         if severity < 0:
             severity = 0
         if severity > 100:
@@ -821,9 +843,10 @@ Return ONLY a JSON object with EXACTLY this schema, and nothing else:
 
         principle = (
             "The responses are equivalent if they agree on the same 'verdict' "
-            "(COMPLIANT vs VIOLATION) and their 'severity' scores differ by no "
-            "more than 20. The 'reason' fields must be semantically similar and "
-            "must both cite the specific license term(s) at issue."
+            "(one of COMPLIANT, VIOLATION, or INVALID) and their 'severity' "
+            "scores differ by no more than 20. The 'reason' fields must be "
+            "semantically similar and must both cite the specific license "
+            "term(s) at issue."
         )
         return gl.eq_principle.prompt_comparative(get_compliance, principle)
 
@@ -874,18 +897,33 @@ Return ONLY a JSON object with EXACTLY this schema, and nothing else:
         if len(usage_url.strip()) == 0:
             raise Exception("Usage URL cannot be empty")
 
-        required = int(lic.price) + int(lic.bond)
-        if int(gl.message.value) < required:
-            raise Exception("Insufficient payment: need price + compliance bond")
+        # Re-check certificate validity AT PURCHASE: a certificate can be revoked
+        # (e.g. a challenge overturned the ORIGINAL verdict) after the license was
+        # listed. A revoked certificate must not be purchasable.
+        if lic.artwork_id not in self.certificates:
+            raise Exception("Artwork certificate no longer exists; cannot purchase")
+        if self.certificates[lic.artwork_id].status != "VALID":
+            raise Exception("Certificate is no longer VALID; cannot purchase license")
 
         if gl.message.sender_address == lic.rights_holder:
             raise Exception("Rights holder cannot license their own work to themselves")
+
+        required = int(lic.price) + int(lic.bond)
+        paid = int(gl.message.value)
+        if paid < required:
+            raise Exception("Insufficient payment: need price + compliance bond")
 
         # Pay the royalty straight through to the rights holder; hold the bond.
         price_amount = int(lic.price)
         if price_amount > 0:
             gl.get_contract_at(lic.rights_holder).emit_transfer(value=u256(price_amount))
         self.royalties_paid = u256(int(self.royalties_paid) + price_amount)
+
+        # Require exact payment: refund any excess over price + bond to the buyer
+        # so the contract never silently retains overpayment.
+        excess = paid - required
+        if excess > 0:
+            gl.get_contract_at(gl.message.sender_address).emit_transfer(value=u256(excess))
 
         grant_id = self.next_grant_id
         self.next_grant_id = str(int(self.next_grant_id) + 1)
@@ -899,6 +937,7 @@ Return ONLY a JSON object with EXACTLY this schema, and nothing else:
             bond_locked=u256(int(lic.bond)),
             status="ACTIVE",
             verdict="",
+            purchased_at=u256(_now_epoch()),
         )
         return grant_id
 
@@ -939,6 +978,18 @@ Return ONLY a JSON object with EXACTLY this schema, and nothing else:
         stake_amount = int(gl.message.value)
         bond_amount = int(grant.bond_locked)
 
+        if verdict["verdict"] == "INVALID":
+            # Malformed / non-conforming adjudication: reject it and settle
+            # NOTHING. Return the rights holder's review stake and leave the
+            # licensee's bond locked so a fresh review can be opened later.
+            # Neither side is paid from the other's collateral.
+            if stake_amount > 0:
+                gl.get_contract_at(lic.rights_holder).emit_transfer(value=u256(stake_amount))
+            grant.status = "ACTIVE"
+            grant.verdict = verdict_str
+            self.grants[grant_id] = grant
+            return
+
         if verdict["verdict"] == "VIOLATION":
             # Licensee breached: rights holder recovers stake + is awarded the bond.
             payout = stake_amount + bond_amount
@@ -957,6 +1008,37 @@ Return ONLY a JSON object with EXACTLY this schema, and nothing else:
 
         grant.bond_locked = u256(0)
         grant.verdict = verdict_str
+        self.grants[grant_id] = grant
+
+    @gl.public.write
+    def reclaimComplianceBond(self, grant_id: str) -> None:
+        """Bounded return path for a licensee's compliance bond when the rights
+        holder never opens a review.
+
+        Guarded: only the licensee, only while the grant is still ACTIVE (no
+        review ever started), refunds exactly the locked bond once, and — on
+        builds that expose an on-chain clock — only after BOND_RECLAIM_WINDOW_SECS
+        has elapsed since purchase. Where no clock is available the time gate is
+        advisory (see _now_epoch), matching the rest of the project.
+        """
+        if grant_id not in self.grants:
+            raise Exception("Grant not found")
+        grant = self.grants[grant_id]
+        if grant.status != "ACTIVE":
+            raise Exception("Bond not reclaimable; grant is under review or settled")
+        if gl.message.sender_address != grant.licensee:
+            raise Exception("Only the licensee can reclaim the compliance bond")
+
+        now = _now_epoch()
+        purchased = int(grant.purchased_at)
+        if now != 0 and purchased != 0 and (now - purchased) < self.BOND_RECLAIM_WINDOW_SECS:
+            raise Exception("Bond reclaim window has not elapsed yet")
+
+        bond_amount = int(grant.bond_locked)
+        if bond_amount > 0:
+            gl.get_contract_at(grant.licensee).emit_transfer(value=u256(bond_amount))
+        grant.bond_locked = u256(0)
+        grant.status = "REFUNDED"
         self.grants[grant_id] = grant
 
     # ------------------------------------------------------------------
@@ -1183,6 +1265,7 @@ Return ONLY a JSON object with EXACTLY this schema, and nothing else:
             "bond_locked": int(grant.bond_locked),
             "status": grant.status,
             "verdict": verdict_data,
+            "purchased_at": int(grant.purchased_at),
         }
 
     @gl.public.view
